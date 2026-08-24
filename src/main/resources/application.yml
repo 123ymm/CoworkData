@@ -1,9 +1,9 @@
 spring:
   application:
     name: CoworkData
-  # 暂未配置数据库时先排除 DataSource 自动配置，避免启动失败
-  autoconfigure:
-    exclude:
-      - org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration
-      - org.springframework.boot.autoconfigure.jdbc.DataSourceTransactionManagerAutoConfiguration
-      - com.baomidou.mybatisplus.autoconfigure.MybatisPlusAutoConfiguration
+  datasource:
+    url: jdbc:postgresql://localhost:5432/coworkdata
+    username: cowork
+    password: cowork123
+    driver-class-name: org.postgresql.Driver
+  # 删掉原来的 autoconfigure.exclude（那几行 DataSource / MybatisPlus 排除）
