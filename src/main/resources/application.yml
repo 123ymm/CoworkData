@@ -6,4 +6,11 @@ spring:
     username: cowork
     password: cowork123
     driver-class-name: org.postgresql.Driver
-  # 删掉原来的 autoconfigure.exclude（那几行 DataSource / MybatisPlus 排除）
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:schema.sql
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
