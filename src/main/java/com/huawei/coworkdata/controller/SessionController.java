@@ -1,10 +1,16 @@
 package com.huawei.coworkdata.controller;
 
 import com.huawei.coworkdata.dto.AppendSseEventRequest;
+import com.huawei.coworkdata.dto.EventDto;
 import com.huawei.coworkdata.dto.SaveWorkspaceRequest;
+import com.huawei.coworkdata.dto.SessionIncrementalUploadRequest;
 import com.huawei.coworkdata.dto.SessionRecordDto;
+import com.huawei.coworkdata.dto.SessionUploadResultDto;
+import com.huawei.coworkdata.dto.UpdateLastUploadIndexRequest;
 import com.huawei.coworkdata.dto.UpdateSessionStatusRequest;
-import com.huawei.coworkdata.persistence.PostgresStateStoreService;
+import com.huawei.coworkdata.dto.UploadWatermarkDto;
+import com.huawei.coworkdata.service.PostgresStateStoreService;
+import com.huawei.coworkdata.service.SessionSyncService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -14,6 +20,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
@@ -22,19 +29,52 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 对应 Python {@code PostgresStateStore} 对外方法。
+ * 会话 API：地端同步 + 投影读写（统一前缀 {@code /api/sessions}）。
  */
 @RestController
-@RequestMapping("/api/persistence/sessions")
+@RequestMapping("/api/sessions")
 @RequiredArgsConstructor
-public class SessionPersistenceController {
+public class SessionController {
 
+    private final SessionSyncService sessionSyncService;
     private final PostgresStateStoreService stateStore;
 
+    // ── 地端同步（优先） ──────────────────────────────────────────────────────
+
+    /** 按用户列出会话（须带 userId） */
     @GetMapping
-    public List<SessionRecordDto> listSessions() {
-        return stateStore.listSessions();
+    public List<SessionRecordDto> listByUser(@RequestParam String userId) {
+        return sessionSyncService.listByUserId(userId);
     }
+
+    /** 查询上传水位 */
+    @GetMapping("/{sessionId}/upload-watermark")
+    public UploadWatermarkDto getUploadWatermark(@PathVariable String sessionId) {
+        return sessionSyncService.getUploadWatermark(sessionId);
+    }
+
+    /** 增量上传事件 */
+    @PostMapping("/{sessionId}/upload")
+    public SessionUploadResultDto incrementalUpload(
+            @PathVariable String sessionId,
+            @RequestBody SessionIncrementalUploadRequest request) {
+        return sessionSyncService.incrementalUpload(sessionId, request);
+    }
+
+    /** 会话回放：全部事件 */
+    @GetMapping("/{sessionId}/events")
+    public List<EventDto> replay(@PathVariable String sessionId) {
+        return sessionSyncService.replay(sessionId);
+    }
+
+    /** 软删会话 */
+    @DeleteMapping("/{sessionId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void softDelete(@PathVariable String sessionId) {
+        sessionSyncService.softDelete(sessionId);
+    }
+
+    // ── 投影读写 ────────────────────────────────────────────────────────────
 
     @GetMapping("/active")
     public List<String> listActiveSessionIds() {
@@ -90,9 +130,10 @@ public class SessionPersistenceController {
         stateStore.updateSessionStatus(sessionId, request.getStatus());
     }
 
-    @DeleteMapping("/{sessionId}")
-    @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void deleteSession(@PathVariable String sessionId) {
-        stateStore.deleteSession(sessionId);
+    @PutMapping("/{sessionId}/last-upload-index")
+    public void updateLastUploadIndex(
+            @PathVariable String sessionId,
+            @RequestBody UpdateLastUploadIndexRequest request) {
+        stateStore.updateLastUploadIndex(sessionId, request.getLastUploadIndex());
     }
 }

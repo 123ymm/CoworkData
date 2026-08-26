@@ -1,8 +1,8 @@
 package com.huawei.coworkdata.controller;
 
 import com.huawei.coworkdata.dto.SessionsStoreRequest;
-import com.huawei.coworkdata.persistence.DbInitService;
-import com.huawei.coworkdata.persistence.SkillReporterService;
+import com.huawei.coworkdata.service.DbInitService;
+import com.huawei.coworkdata.service.SkillReporterService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -18,7 +18,7 @@ import java.util.Map;
  * 对应 Python {@code postgres.__init__} 与 {@code skill_reporter.set_sessions_store}。
  */
 @RestController
-@RequestMapping("/api/persistence/db")
+@RequestMapping("/api/db")
 @RequiredArgsConstructor
 public class DbInitController {
 

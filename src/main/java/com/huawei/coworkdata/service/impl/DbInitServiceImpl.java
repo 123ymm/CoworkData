@@ -1,5 +1,6 @@
-package com.huawei.coworkdata.persistence;
+package com.huawei.coworkdata.service.impl;
 
+import com.huawei.coworkdata.service.DbInitService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.ClassPathResource;
@@ -13,13 +14,14 @@ import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
-public class DbInitService {
+public class DbInitServiceImpl implements DbInitService {
 
     private final DataSource dataSource;
 
     @Value("${spring.datasource.url}")
     private String configuredUrl;
 
+    @Override
     public String resolveDbUrl(String url) {
         if ("sqlite".equals(url) || "sqlite://".equals(url)) {
             Path dbPath = Path.of(System.getProperty("user.dir"), "data", "ipmc-dev.db");
@@ -34,6 +36,7 @@ public class DbInitService {
         return url;
     }
 
+    @Override
     public void createTables() {
         ResourceDatabasePopulator populator = new ResourceDatabasePopulator();
         populator.addScript(new ClassPathResource("schema.sql"));
@@ -41,6 +44,7 @@ public class DbInitService {
         populator.execute(dataSource);
     }
 
+    @Override
     public Map<String, Object> createSessionFactoryInfo(String databaseUrl) {
         String resolved = resolveDbUrl(databaseUrl);
         Map<String, Object> info = new HashMap<>();
@@ -49,6 +53,7 @@ public class DbInitService {
         return info;
     }
 
+    @Override
     public Map<String, Object> initDb(String databaseUrl) {
         String resolved = databaseUrl != null && !databaseUrl.isBlank()
                 ? resolveDbUrl(databaseUrl)

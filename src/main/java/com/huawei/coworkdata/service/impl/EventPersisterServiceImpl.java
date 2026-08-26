@@ -1,6 +1,8 @@
-package com.huawei.coworkdata.persistence;
+package com.huawei.coworkdata.service.impl;
 
 import com.huawei.coworkdata.dto.EventDto;
+import com.huawei.coworkdata.service.EventPersisterService;
+import com.huawei.coworkdata.service.PostgresEventStoreService;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -10,9 +12,9 @@ import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
-public class EventPersisterService {
+public class EventPersisterServiceImpl implements EventPersisterService {
 
-    private static final Logger log = LoggerFactory.getLogger(EventPersisterService.class);
+    private static final Logger log = LoggerFactory.getLogger(EventPersisterServiceImpl.class);
 
     private static final Set<String> TRANSIENT_EVENT_TYPES = Set.of(
             "text_delta", "reasoning_delta", "TextDelta", "ReasoningDelta"
@@ -20,6 +22,7 @@ public class EventPersisterService {
 
     private final PostgresEventStoreService eventStore;
 
+    @Override
     public void onEvent(EventDto event) {
         if (event.getType() != null && TRANSIENT_EVENT_TYPES.contains(event.getType())) {
             return;

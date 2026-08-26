@@ -1,11 +1,11 @@
 package com.huawei.coworkdata.controller;
 
 import com.huawei.coworkdata.dto.EventDto;
-import com.huawei.coworkdata.persistence.EventPersisterService;
-import com.huawei.coworkdata.persistence.ProjectionUpdaterService;
-import com.huawei.coworkdata.persistence.ReconcileService;
-import com.huawei.coworkdata.persistence.SkillReporterService;
-import com.huawei.coworkdata.persistence.SnapshotWriterService;
+import com.huawei.coworkdata.service.EventPersisterService;
+import com.huawei.coworkdata.service.ProjectionUpdaterService;
+import com.huawei.coworkdata.service.ReconcileService;
+import com.huawei.coworkdata.service.SkillReporterService;
+import com.huawei.coworkdata.service.SnapshotWriterService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -18,7 +18,7 @@ import java.util.Map;
  * 对应 persistence 目录下 EventBus 订阅者与 reconcile 的对外方法。
  */
 @RestController
-@RequestMapping("/api/persistence")
+@RequestMapping("/api")
 @RequiredArgsConstructor
 public class PersistencePipelineController {
 

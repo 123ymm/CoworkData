@@ -2,10 +2,10 @@ package com.huawei.coworkdata.controller;
 
 import com.huawei.coworkdata.dto.EventDto;
 import com.huawei.coworkdata.dto.RunSnapshotDto;
-import com.huawei.coworkdata.persistence.EventPersisterService;
-import com.huawei.coworkdata.persistence.PostgresEventStoreService;
-import com.huawei.coworkdata.persistence.ProjectionUpdaterService;
-import com.huawei.coworkdata.persistence.SnapshotWriterService;
+import com.huawei.coworkdata.service.EventPersisterService;
+import com.huawei.coworkdata.service.PostgresEventStoreService;
+import com.huawei.coworkdata.service.ProjectionUpdaterService;
+import com.huawei.coworkdata.service.SnapshotWriterService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -24,7 +24,7 @@ import java.util.Map;
  * 对应 Python {@code PostgresEventStore} 对外方法，以及事件落库流水线。
  */
 @RestController
-@RequestMapping("/api/persistence/events")
+@RequestMapping("/api/events")
 @RequiredArgsConstructor
 public class EventPersistenceController {
 
@@ -45,11 +45,6 @@ public class EventPersistenceController {
         eventPersister.onEvent(event);
         projectionUpdater.onEvent(event);
         snapshotWriter.onEvent(event);
-    }
-
-    @GetMapping("/sessions/{sessionId}")
-    public List<EventDto> readBySession(@PathVariable String sessionId) {
-        return eventStore.readBySession(sessionId);
     }
 
     @GetMapping("/sessions/{sessionId}/types")

@@ -1,6 +1,9 @@
-package com.huawei.coworkdata.persistence;
+package com.huawei.coworkdata.service.impl;
 
 import com.huawei.coworkdata.dto.EventDto;
+import com.huawei.coworkdata.service.PostgresEventStoreService;
+import com.huawei.coworkdata.service.PostgresStateStoreService;
+import com.huawei.coworkdata.service.ReconcileService;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -12,13 +15,14 @@ import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
-public class ReconcileService {
+public class ReconcileServiceImpl implements ReconcileService {
 
-    private static final Logger log = LoggerFactory.getLogger(ReconcileService.class);
+    private static final Logger log = LoggerFactory.getLogger(ReconcileServiceImpl.class);
 
     private final PostgresStateStoreService stateStore;
     private final PostgresEventStoreService eventStore;
 
+    @Override
     public int reconcileStrandedRunningSessions() {
         Set<String> eventActive = new HashSet<>(eventStore.listActiveSessionIds());
         List<String> projectionRunning = stateStore.listActiveSessionIds();

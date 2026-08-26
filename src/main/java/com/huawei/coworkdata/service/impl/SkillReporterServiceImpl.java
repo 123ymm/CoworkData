@@ -1,20 +1,20 @@
-package com.huawei.coworkdata.persistence;
+package com.huawei.coworkdata.service.impl;
 
 import com.huawei.coworkdata.dto.EventDto;
 import com.huawei.coworkdata.dto.SessionEntryDto;
 import com.huawei.coworkdata.dto.SessionsStoreRequest;
+import com.huawei.coworkdata.service.SkillReporterService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 @Slf4j
-public class SkillReporterService {
+public class SkillReporterServiceImpl implements SkillReporterService {
 
     private static final Set<String> TASK_TERMINAL_EVENTS = Set.of(
             "TaskFinished", "TaskFailed", "TaskCanceled", "TaskFinalized"
@@ -24,6 +24,7 @@ public class SkillReporterService {
     private final Map<String, Map<String, Object>> taskStartTime = new ConcurrentHashMap<>();
     private volatile boolean closed = false;
 
+    @Override
     public void setSessionsStore(SessionsStoreRequest request) {
         sessionsStore.clear();
         if (request != null && request.getEntries() != null) {
@@ -36,6 +37,7 @@ public class SkillReporterService {
         log.info("SkillReporter: set_sessions_store called, store size={}", sessionsStore.size());
     }
 
+    @Override
     public void onEvent(EventDto event) {
         if (closed) {
             return;
@@ -62,6 +64,7 @@ public class SkillReporterService {
         }
     }
 
+    @Override
     public void close() {
         closed = true;
         taskStartTime.clear();

@@ -1,4 +1,4 @@
-package com.huawei.coworkdata.persistence;
+package com.huawei.coworkdata.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.huawei.coworkdata.dto.EventDto;
@@ -6,6 +6,7 @@ import com.huawei.coworkdata.entity.SessionEntity;
 import com.huawei.coworkdata.entity.TaskEntity;
 import com.huawei.coworkdata.mapper.SessionMapper;
 import com.huawei.coworkdata.mapper.TaskMapper;
+import com.huawei.coworkdata.service.ProjectionUpdaterService;
 import com.huawei.coworkdata.util.JsonUtils;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
@@ -21,9 +22,9 @@ import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
-public class ProjectionUpdaterService {
+public class ProjectionUpdaterServiceImpl implements ProjectionUpdaterService {
 
-    private static final Logger log = LoggerFactory.getLogger(ProjectionUpdaterService.class);
+    private static final Logger log = LoggerFactory.getLogger(ProjectionUpdaterServiceImpl.class);
 
     private static final Set<String> TRANSIENT_EVENT_TYPES = Set.of(
             "text_delta", "reasoning_delta", "TextDelta", "ReasoningDelta"
@@ -46,6 +47,7 @@ public class ProjectionUpdaterService {
     private final SessionMapper sessionMapper;
     private final TaskMapper taskMapper;
 
+    @Override
     public void onEvent(EventDto event) {
         if (event.getType() != null && TRANSIENT_EVENT_TYPES.contains(event.getType())) {
             return;
@@ -149,6 +151,11 @@ public class ProjectionUpdaterService {
             entity.setId(event.getSessionId());
             entity.setTenantId(stringVal(payload.get("tenant_id")) != null
                     ? stringVal(payload.get("tenant_id")) : event.getTenantId());
+            String userId = stringVal(payload.get("user_id"));
+            if (userId == null || userId.isBlank()) {
+                userId = stringVal(payload.get("username"));
+            }
+            entity.setUserId(userId);
             entity.setUserPrompt(stringVal(payload.get("user_prompt")) != null
                     ? stringVal(payload.get("user_prompt")) : "");
             entity.setStatus("RUNNING");
@@ -163,6 +170,7 @@ public class ProjectionUpdaterService {
                     ? stringVal(payload.get("template_id")) : "");
             entity.setConfigJson(JsonUtils.toJson(config));
             entity.setFailureCounter(0);
+            entity.setLastUploadIndex(0);
             entity.setCreatedAt(event.getTimestamp() != null ? event.getTimestamp() : OffsetDateTime.now());
             sessionMapper.insert(entity);
         } else if (existing.getRootAgentId() == null) {

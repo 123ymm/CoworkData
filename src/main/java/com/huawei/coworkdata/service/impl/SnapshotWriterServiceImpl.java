@@ -1,7 +1,9 @@
-package com.huawei.coworkdata.persistence;
+package com.huawei.coworkdata.service.impl;
 
 import com.huawei.coworkdata.dto.EventDto;
 import com.huawei.coworkdata.dto.RunSnapshotDto;
+import com.huawei.coworkdata.service.PostgresEventStoreService;
+import com.huawei.coworkdata.service.SnapshotWriterService;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -16,9 +18,9 @@ import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 @RequiredArgsConstructor
-public class SnapshotWriterService {
+public class SnapshotWriterServiceImpl implements SnapshotWriterService {
 
-    private static final Logger log = LoggerFactory.getLogger(SnapshotWriterService.class);
+    private static final Logger log = LoggerFactory.getLogger(SnapshotWriterServiceImpl.class);
 
     public static final int DEFAULT_SNAPSHOT_EVERY_N_EVENTS = 50;
 
@@ -31,6 +33,7 @@ public class SnapshotWriterService {
     private final Map<String, Integer> sinceSnapshot = new ConcurrentHashMap<>();
     private volatile boolean closed = false;
 
+    @Override
     public void onEvent(EventDto event) {
         String sessionId = event.getSessionId();
         if (sessionId == null || sessionId.isBlank()) {
@@ -57,6 +60,7 @@ public class SnapshotWriterService {
         }
     }
 
+    @Override
     public void close() {
         closed = true;
         sinceSnapshot.clear();

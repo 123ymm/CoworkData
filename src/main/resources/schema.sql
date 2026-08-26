@@ -1,6 +1,7 @@
 CREATE TABLE IF NOT EXISTS sessions (
     id              VARCHAR(64) PRIMARY KEY,
     tenant_id       VARCHAR(64)  NOT NULL DEFAULT 'default',
+    user_id         VARCHAR(128),
     user_prompt     TEXT         NOT NULL,
     status          VARCHAR(32)  NOT NULL DEFAULT 'RUNNING',
     goal            TEXT         NOT NULL DEFAULT '',
@@ -9,14 +10,18 @@ CREATE TABLE IF NOT EXISTS sessions (
     llm_model       VARCHAR(128),
     token_budget    BIGINT       NOT NULL DEFAULT 200000,
     failure_counter INTEGER      NOT NULL DEFAULT 0,
-    config_json     TEXT         NOT NULL DEFAULT '{}',
-    workspace       TEXT,
-    created_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-    updated_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+    config_json         TEXT         NOT NULL DEFAULT '{}',
+    workspace           TEXT,
+    last_upload_index   INTEGER      NOT NULL DEFAULT 0,
+    delete_at           TIMESTAMPTZ,
+    created_at          TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    updated_at          TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX IF NOT EXISTS ix_sessions_tenant_id ON sessions (tenant_id);
+CREATE INDEX IF NOT EXISTS ix_sessions_user_id ON sessions (user_id);
 CREATE INDEX IF NOT EXISTS ix_sessions_status ON sessions (status);
+CREATE INDEX IF NOT EXISTS ix_sessions_delete_at ON sessions (delete_at);
 
 CREATE TABLE IF NOT EXISTS tasks (
     id                VARCHAR(64) PRIMARY KEY,
