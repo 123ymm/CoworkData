@@ -10,7 +10,7 @@ import com.huawei.coworkdata.mapper.SnapshotMapper;
 import com.huawei.coworkdata.service.PostgresEventStoreService;
 import com.huawei.coworkdata.util.EventConverter;
 import com.huawei.coworkdata.util.JsonUtils;
-import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,12 +21,20 @@ import java.util.List;
 import java.util.Map;
 
 @Service
-@RequiredArgsConstructor
 public class PostgresEventStoreServiceImpl implements PostgresEventStoreService {
 
     private final EventMapper eventMapper;
     private final SnapshotMapper snapshotMapper;
-    private final int keepSnapshots = 3;
+    private final int keepSnapshots;
+
+    public PostgresEventStoreServiceImpl(
+            EventMapper eventMapper,
+            SnapshotMapper snapshotMapper,
+            @Value("${coworkdata.snapshot.keep:3}") int keepSnapshots) {
+        this.eventMapper = eventMapper;
+        this.snapshotMapper = snapshotMapper;
+        this.keepSnapshots = Math.max(1, keepSnapshots);
+    }
 
     @Override
     @Transactional

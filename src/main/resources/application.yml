@@ -11,6 +11,11 @@ spring:
       mode: always
       schema-locations: classpath:schema.sql
 
+coworkdata:
+  snapshot:
+    keep: 3
+    every-n-events: 50
+
 mybatis-plus:
   configuration:
     map-underscore-to-camel-case: true

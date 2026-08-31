@@ -4,9 +4,9 @@ import com.huawei.coworkdata.dto.EventDto;
 import com.huawei.coworkdata.dto.RunSnapshotDto;
 import com.huawei.coworkdata.service.PostgresEventStoreService;
 import com.huawei.coworkdata.service.SnapshotWriterService;
-import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.time.OffsetDateTime;
@@ -17,7 +17,6 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Service
-@RequiredArgsConstructor
 public class SnapshotWriterServiceImpl implements SnapshotWriterService {
 
     private static final Logger log = LoggerFactory.getLogger(SnapshotWriterServiceImpl.class);
@@ -29,9 +28,16 @@ public class SnapshotWriterServiceImpl implements SnapshotWriterService {
     );
 
     private final PostgresEventStoreService eventStore;
-    private final int everyN = DEFAULT_SNAPSHOT_EVERY_N_EVENTS;
+    private final int everyN;
     private final Map<String, Integer> sinceSnapshot = new ConcurrentHashMap<>();
     private volatile boolean closed = false;
+
+    public SnapshotWriterServiceImpl(
+            PostgresEventStoreService eventStore,
+            @Value("${coworkdata.snapshot.every-n-events:50}") int everyN) {
+        this.eventStore = eventStore;
+        this.everyN = Math.max(1, everyN);
+    }
 
     @Override
     public void onEvent(EventDto event) {

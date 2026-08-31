@@ -21,6 +21,7 @@ public interface EventMapper extends BaseMapper<EventEntity> {
                 WHERE type IN ('SessionCreated', 'SessionResumed')
                 GROUP BY session_id
             ) opened
+            INNER JOIN sessions s ON s.id = opened.session_id AND s.delete_at IS NULL
             LEFT JOIN (
                 SELECT session_id, MAX(id) AS finished
                 FROM events

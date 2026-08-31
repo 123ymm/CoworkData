@@ -10,6 +10,8 @@ import com.huawei.coworkdata.dto.UpdateLastUploadIndexRequest;
 import com.huawei.coworkdata.dto.UpdateSessionStatusRequest;
 import com.huawei.coworkdata.dto.UploadWatermarkDto;
 import com.huawei.coworkdata.service.PostgresStateStoreService;
+import com.huawei.coworkdata.service.SessionExportService;
+import com.huawei.coworkdata.service.SessionImportService;
 import com.huawei.coworkdata.service.SessionSyncService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -38,6 +40,8 @@ public class SessionController {
 
     private final SessionSyncService sessionSyncService;
     private final PostgresStateStoreService stateStore;
+    private final SessionExportService sessionExportService;
+    private final SessionImportService sessionImportService;
 
     // ── 地端同步（优先） ──────────────────────────────────────────────────────
 
@@ -79,6 +83,18 @@ public class SessionController {
     @GetMapping("/active")
     public List<String> listActiveSessionIds() {
         return stateStore.listActiveSessionIds();
+    }
+
+    /** 导入 Host 重写好 id 的 bundle */
+    @PostMapping("/import-bundle")
+    public Map<String, String> importBundle(@RequestBody Map<String, Object> bundle) {
+        return Map.of("sessionId", sessionImportService.importBundle(bundle));
+    }
+
+    /** 导出单会话表行 bundle（Host 组装 SQLite 用） */
+    @GetMapping("/{sessionId}/export-bundle")
+    public Map<String, Object> exportBundle(@PathVariable String sessionId) {
+        return sessionExportService.exportBundle(sessionId);
     }
 
     @GetMapping("/{sessionId}")

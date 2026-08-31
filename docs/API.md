@@ -48,6 +48,7 @@ com.huawei.coworkdata
 ├── snapshot-writer/       ← SnapshotWriter
 ├── skill-reporter/        ← SkillReporter
 ├── reconcile/             ← reconcile_stranded_running_sessions
+├── user-profiles/         ← OAuth 用户字典（UserProfileController）
 ├── db/                    ← 库初始化
 └── test/                  ← 连通性测试
 ```
@@ -528,6 +529,85 @@ GET /api/events/last-activity-times
 
 ---
 
+## 9.6 Agent Templates API
+
+**Controller：** `AgentTemplateController`  
+**前缀：** `/api/agent-templates`
+
+| 方法 | 路径 | 作用 |
+|------|------|------|
+| `GET` | `/api/agent-templates` | 列出全部模板元数据 |
+| `GET` | `/api/agent-templates/{id}` | 单条；不存在 → **404** |
+| `PUT` | `/api/agent-templates/{id}` | upsert（id 在路径） |
+| `DELETE` | `/api/agent-templates/{id}` | 删除；不存在 → **404** |
+
+对应 Python `TemplateStore` DB 模式。
+
+---
+
+## 9.6.1 User Profiles API
+
+**Controller：** `UserProfileController`  
+**前缀：** `/api/user-profiles`
+
+地端 OAuth 用户字典（`user_id` ↔ `username`）。与 `sessions.user_id` 无外键，仅作展示/反查。
+
+| 方法 | 路径 | 作用 |
+|------|------|------|
+| `GET` | `/api/user-profiles` | 列出全部 |
+| `GET` | `/api/user-profiles/{userId}` | 单条；不存在 → **404** |
+| `PUT` | `/api/user-profiles/{userId}` | upsert；body 需含 `username` |
+| `DELETE` | `/api/user-profiles/{userId}` | 删除；不存在 → **404** |
+
+请求 / 响应示例：
+
+```json
+{ "userId": "99", "username": "alice" }
+```
+
+地端在会话增量上传时，若能解析到 OAuth `id` + `username`，会一并 upsert。
+
+---
+
+## 9.7 会话导出 bundle
+
+**路径：** `GET /api/sessions/{sessionId}/export-bundle`
+
+返回 JSON，key 为表名（snake_case），value 为行数组。Host 据此组装 gzip SQLite。
+
+包含表：`sessions`、`tasks`、`events`、`session_sse_events`、`snapshots`、`memory_events`、`memory_subscriptions`（memory 表不存在时为空数组）。
+
+---
+
+## 9.8 会话导入 bundle
+
+**路径：** `POST /api/sessions/import-bundle`
+
+请求体与 export-bundle 同形（Host 在本地完成 id 重映射后 POST）。响应：
+
+```json
+{ "sessionId": "imp_xxx" }
+```
+
+---
+
+## 9.9 Memory API
+
+**Controller：** `MemoryController`  
+**前缀：** `/api/memory`
+
+| 方法 | 路径 | Python |
+|------|------|--------|
+| `POST` | `/api/memory/ingest` | `PostgresMemoryProvider.ingest` |
+| `POST` | `/api/memory/fold` | `PostgresMemoryProvider.fold` |
+| `POST` | `/api/memory/load-view-raw` | `load_view` 原始行（Host 侧 `normalize_view`） |
+| `GET` | `/api/memory/recall-topic?topic=&since=` | `recall_topic` |
+| `POST` | `/api/memory/subscriptions` | `subscribe_topic` |
+| `GET` | `/api/memory/subscriptions?sessionId=&taskId=` | `list_subscriptions` |
+| `GET` | `/api/memory/describe` | `describe` |
+
+---
+
 ## 10. Python ↔ HTTP 对照速查
 
 | Python 模块 / 类 | REST 前缀 |
@@ -541,6 +621,11 @@ GET /api/events/last-activity-times
 | `skill_reporter.SkillReporter` | `POST /api/skill-reporter/*` + `PUT /api/db/skill-reporter/sessions-store` |
 | `postgres.reconcile.reconcile_stranded_running_sessions` | `POST /api/reconcile/stranded-running-sessions` |
 | `postgres.__init__` | `/api/db/*` |
+| `providers.templates.store.TemplateStore` | `/api/agent-templates` |
+| `observability.cowork_data_sync`（user_profile upsert） | `/api/user-profiles` |
+| `providers.memory.postgres.PostgresMemoryProvider` | `/api/memory/*` |
+| `observability.session_export.export_session_db` | `GET /api/sessions/{id}/export-bundle` → Host 组装 SQLite |
+| `observability.session_import.import_session_db` | `POST /api/sessions/import-bundle` |
 
 ---
 
