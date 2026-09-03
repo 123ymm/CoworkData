@@ -8,7 +8,7 @@ import org.springframework.jdbc.datasource.init.ResourceDatabasePopulator;
 import org.springframework.stereotype.Service;
 
 import javax.sql.DataSource;
-import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -24,8 +24,8 @@ public class DbInitServiceImpl implements DbInitService {
     @Override
     public String resolveDbUrl(String url) {
         if ("sqlite".equals(url) || "sqlite://".equals(url)) {
-            Path dbPath = Path.of(System.getProperty("user.dir"), "data", "ipmc-dev.db");
-            return "sqlite+aiosqlite:///" + dbPath.toString().replace('\\', '/');
+            String dbPath = Paths.get(System.getProperty("user.dir"), "data", "ipmc-dev.db").toString();
+            return "sqlite+aiosqlite:///" + dbPath.replace('\\', '/');
         }
         if (url.startsWith("sqlite:///") && !url.contains("+aiosqlite")) {
             return "sqlite+aiosqlite:///" + url.substring("sqlite:///".length());
@@ -55,7 +55,7 @@ public class DbInitServiceImpl implements DbInitService {
 
     @Override
     public Map<String, Object> initDb(String databaseUrl) {
-        String resolved = databaseUrl != null && !databaseUrl.isBlank()
+        String resolved = databaseUrl != null && !databaseUrl.trim().isEmpty()
                 ? resolveDbUrl(databaseUrl)
                 : configuredUrl;
         createTables();

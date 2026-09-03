@@ -15,7 +15,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -26,23 +29,27 @@ public class ProjectionUpdaterServiceImpl implements ProjectionUpdaterService {
 
     private static final Logger log = LoggerFactory.getLogger(ProjectionUpdaterServiceImpl.class);
 
-    private static final Set<String> TRANSIENT_EVENT_TYPES = Set.of(
+    private static final Set<String> TRANSIENT_EVENT_TYPES = Collections.unmodifiableSet(new HashSet<>(Arrays.asList(
             "text_delta", "reasoning_delta", "TextDelta", "ReasoningDelta"
-    );
+    )));
 
-    private static final Set<String> VALID_SESSION_STATUSES = Set.of(
+    private static final Set<String> VALID_SESSION_STATUSES = Collections.unmodifiableSet(new HashSet<>(Arrays.asList(
             "RUNNING", "SUCCEEDED", "FAILED", "CANCELED", "INTERRUPTED", "PAUSED_HITL", "PAUSED"
-    );
+    )));
 
-    private static final Map<String, String> TASK_STATUS_BY_EVENT = Map.of(
-            "TaskStarted", "ACTIVE",
-            "TaskResumed", "ACTIVE",
-            "TaskSuspended", "SUSPENDED",
-            "TaskRequeued", "PENDING",
-            "TaskFinished", "FINISHED",
-            "TaskFailed", "FAILED",
-            "TaskCanceled", "CANCELED"
-    );
+    private static final Map<String, String> TASK_STATUS_BY_EVENT;
+
+    static {
+        Map<String, String> m = new HashMap<>();
+        m.put("TaskStarted", "ACTIVE");
+        m.put("TaskResumed", "ACTIVE");
+        m.put("TaskSuspended", "SUSPENDED");
+        m.put("TaskRequeued", "PENDING");
+        m.put("TaskFinished", "FINISHED");
+        m.put("TaskFailed", "FAILED");
+        m.put("TaskCanceled", "CANCELED");
+        TASK_STATUS_BY_EVENT = Collections.unmodifiableMap(m);
+    }
 
     private final SessionMapper sessionMapper;
     private final TaskMapper taskMapper;
@@ -61,40 +68,53 @@ public class ProjectionUpdaterServiceImpl implements ProjectionUpdaterService {
 
     private void handle(EventDto event) {
         String type = event.getType();
-        Map<String, Object> payload = event.getPayload() != null ? event.getPayload() : Map.of();
+        Map<String, Object> payload = event.getPayload() != null ? event.getPayload() : Collections.emptyMap();
 
         switch (type) {
-            case "SessionCreated" -> upsertSession(event, payload);
-            case "SessionResumed" -> updateSession(event.getSessionId(), Map.of("status", "RUNNING"));
-            case "SessionStatusChanged" -> {
+            case "SessionCreated":
+                upsertSession(event, payload);
+                break;
+            case "SessionResumed":
+                updateSession(event.getSessionId(), statusMap("RUNNING"));
+                break;
+            case "SessionStatusChanged": {
                 String newStatus = stringVal(payload.get("new_status"));
                 if (VALID_SESSION_STATUSES.contains(newStatus)) {
-                    updateSession(event.getSessionId(), Map.of("status", newStatus));
+                    updateSession(event.getSessionId(), statusMap(newStatus));
                 }
+                break;
             }
-            case "SessionFinished" -> {
+            case "SessionFinished": {
                 String finalStatus = stringVal(payload.get("final_status"));
-                if (finalStatus == null || finalStatus.isBlank()) {
+                if (finalStatus == null || finalStatus.trim().isEmpty()) {
                     finalStatus = "SUCCEEDED";
                 }
                 if (VALID_SESSION_STATUSES.contains(finalStatus)) {
-                    updateSession(event.getSessionId(), Map.of("status", finalStatus));
+                    updateSession(event.getSessionId(), statusMap(finalStatus));
                 }
+                break;
             }
-            case "SessionPausedHitl" -> {
+            case "SessionPausedHitl": {
                 String status = "wait".equals(stringVal(payload.get("form"))) ? "PAUSED" : "PAUSED_HITL";
-                updateSession(event.getSessionId(), Map.of("status", status));
+                updateSession(event.getSessionId(), statusMap(status));
+                break;
             }
-            case "HitlApproved", "HitlModified", "HitlAnswered", "HitlRejected", "HitlCancelled" ->
-                    updateSessionIfStatus(event.getSessionId(),
-                            List.of("PAUSED_HITL", "PAUSED"), "RUNNING");
-            case "RunCanceled" ->
-                    updateSessionIfStatus(event.getSessionId(),
-                            List.of("RUNNING", "INTERRUPTED", "PAUSED", "PAUSED_HITL"), "CANCELED");
-            case "RecognizeIntentToolCall" -> {
+            case "HitlApproved":
+            case "HitlModified":
+            case "HitlAnswered":
+            case "HitlRejected":
+            case "HitlCancelled":
+                updateSessionIfStatus(event.getSessionId(),
+                        Arrays.asList("PAUSED_HITL", "PAUSED"), "RUNNING");
+                break;
+            case "RunCanceled":
+                updateSessionIfStatus(event.getSessionId(),
+                        Arrays.asList("RUNNING", "INTERRUPTED", "PAUSED", "PAUSED_HITL"), "CANCELED");
+                break;
+            case "RecognizeIntentToolCall": {
                 String goal = stringVal(payload.get("session_goal"));
-                if (goal != null && !goal.isBlank()) {
-                    updateSession(event.getSessionId(), Map.of("goal", goal));
+                if (goal != null && !goal.trim().isEmpty()) {
+                    updateSession(event.getSessionId(), singletonObjMap("goal", goal));
                 }
                 if (event.getTaskId() != null) {
                     Map<String, Object> values = new HashMap<>();
@@ -108,10 +128,15 @@ public class ProjectionUpdaterServiceImpl implements ProjectionUpdaterService {
                         updateTask(event.getTaskId(), values);
                     }
                 }
+                break;
             }
-            case "FailureThresholdHit" -> { /* no-op */ }
-            case "TaskCreated" -> upsertTask(event, payload);
-            case "TaskRequeued" -> {
+            case "FailureThresholdHit":
+                /* no-op */
+                break;
+            case "TaskCreated":
+                upsertTask(event, payload);
+                break;
+            case "TaskRequeued":
                 if (event.getTaskId() != null) {
                     Map<String, Object> values = new HashMap<>();
                     values.put("status", "PENDING");
@@ -121,10 +146,10 @@ public class ProjectionUpdaterServiceImpl implements ProjectionUpdaterService {
                     }
                     updateTask(event.getTaskId(), values);
                 }
-            }
-            default -> {
+                break;
+            default:
                 if (TASK_STATUS_BY_EVENT.containsKey(type) && event.getTaskId() != null) {
-                    updateTask(event.getTaskId(), Map.of("status", TASK_STATUS_BY_EVENT.get(type)));
+                    updateTask(event.getTaskId(), statusMap(TASK_STATUS_BY_EVENT.get(type)));
                     if ("TaskFailed".equals(type)) {
                         Object errorCode = payload.get("error_code");
                         if (!"TASK_FAILED_BY_THRESHOLD".equals(errorCode)) {
@@ -139,8 +164,18 @@ public class ProjectionUpdaterServiceImpl implements ProjectionUpdaterService {
                     values.put("error", payload.get("error"));
                     updateTask(event.getTaskId(), values);
                 }
-            }
+                break;
         }
+    }
+
+    private static Map<String, Object> statusMap(String status) {
+        return singletonObjMap("status", status);
+    }
+
+    private static Map<String, Object> singletonObjMap(String key, Object value) {
+        Map<String, Object> m = new HashMap<>();
+        m.put(key, value);
+        return m;
     }
 
     @Transactional
@@ -152,7 +187,7 @@ public class ProjectionUpdaterServiceImpl implements ProjectionUpdaterService {
             entity.setTenantId(stringVal(payload.get("tenant_id")) != null
                     ? stringVal(payload.get("tenant_id")) : event.getTenantId());
             String userId = stringVal(payload.get("user_id"));
-            if (userId == null || userId.isBlank()) {
+            if (userId == null || userId.trim().isEmpty()) {
                 userId = stringVal(payload.get("username"));
             }
             entity.setUserId(userId);
@@ -164,7 +199,7 @@ public class ProjectionUpdaterServiceImpl implements ProjectionUpdaterService {
             entity.setLlmProvider(stringVal(payload.get("llm_account")));
             entity.setLlmModel(stringVal(payload.get("llm_model")));
             Object budget = payload.get("token_budget");
-            entity.setTokenBudget(budget instanceof Number n ? n.longValue() : 200_000L);
+            entity.setTokenBudget(budget instanceof Number ? ((Number) budget).longValue() : 200_000L);
             Map<String, Object> config = new HashMap<>();
             config.put("template_id", stringVal(payload.get("template_id")) != null
                     ? stringVal(payload.get("template_id")) : "");
@@ -225,14 +260,16 @@ public class ProjectionUpdaterServiceImpl implements ProjectionUpdaterService {
     @Transactional
     protected void upsertTask(EventDto event, Map<String, Object> payload) {
         Object taskObj = payload.get("task");
-        if (!(taskObj instanceof Map<?, ?> taskData)) {
+        if (!(taskObj instanceof Map)) {
             return;
         }
+        @SuppressWarnings("unchecked")
+        Map<?, ?> taskData = (Map<?, ?>) taskObj;
         String taskId = stringVal(taskData.get("id"));
-        if (taskId == null || taskId.isBlank()) {
+        if (taskId == null || taskId.trim().isEmpty()) {
             taskId = event.getTaskId();
         }
-        if (taskId == null || taskId.isBlank()) {
+        if (taskId == null || taskId.trim().isEmpty()) {
             return;
         }
         TaskEntity existing = taskMapper.selectById(taskId);
@@ -241,7 +278,8 @@ public class ProjectionUpdaterServiceImpl implements ProjectionUpdaterService {
         }
         Object settings = taskData.get("settings");
         boolean isDaemon = false;
-        if (settings instanceof Map<?, ?> settingsMap) {
+        if (settings instanceof Map) {
+            Map<?, ?> settingsMap = (Map<?, ?>) settings;
             isDaemon = "MetadataFillerTaskSettings".equals(stringVal(settingsMap.get("_type")));
         }
         TaskEntity entity = new TaskEntity();

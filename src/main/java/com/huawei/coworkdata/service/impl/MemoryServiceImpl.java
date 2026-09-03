@@ -16,10 +16,13 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -31,13 +34,13 @@ public class MemoryServiceImpl implements MemoryService {
     @Override
     @Transactional
     public String ingest(MemoryIngestDto dto) {
-        String eventId = dto.getId() != null && !dto.getId().isBlank()
+        String eventId = dto.getId() != null && !dto.getId().trim().isEmpty()
                 ? dto.getId()
                 : "mev_" + UUID.randomUUID().toString().replace("-", "").substring(0, 16);
         if (memoryEventMapper.selectById(eventId) != null) {
             return eventId;
         }
-        if (dto.isSupersedePublicationTopic() && dto.getTopic() != null && !dto.getTopic().isBlank()) {
+        if (dto.isSupersedePublicationTopic() && dto.getTopic() != null && !dto.getTopic().trim().isEmpty()) {
             memoryEventMapper.supersedePublicationTopic(dto.getTopic());
         }
         int maxSeq = memoryEventMapper.maxSeqNo(
@@ -47,7 +50,7 @@ public class MemoryServiceImpl implements MemoryService {
                 "agent".equals(dto.getLayer()) ? dto.getAgentId()
                         : ("task".equals(dto.getLayer()) && dto.getAgentId() != null ? dto.getAgentId() : null));
         int topicSeq = 0;
-        if (dto.getTopic() != null && !dto.getTopic().isBlank()) {
+        if (dto.getTopic() != null && !dto.getTopic().trim().isEmpty()) {
             topicSeq = memoryEventMapper.maxTopicSeqNo(dto.getTopic()) + 1;
         }
         MemoryEventEntity entity = new MemoryEventEntity();
@@ -63,7 +66,7 @@ public class MemoryServiceImpl implements MemoryService {
         entity.setSeqNo(maxSeq + 1);
         entity.setTopicSeqNo(topicSeq);
         entity.setIsSuperseded(false);
-        entity.setMetadataJson(JsonUtils.toJson(dto.getMetadata() != null ? dto.getMetadata() : Map.of()));
+        entity.setMetadataJson(JsonUtils.toJson(dto.getMetadata() != null ? dto.getMetadata() : Collections.emptyMap()));
         entity.setTimestamp(dto.getTimestamp() != null ? dto.getTimestamp() : OffsetDateTime.now());
         memoryEventMapper.insert(entity);
         return eventId;
@@ -118,7 +121,7 @@ public class MemoryServiceImpl implements MemoryService {
         } else if ("agent".equals(layer)) {
             q.eq(MemoryEventEntity::getAgentId, agentId);
         }
-        return memoryEventMapper.selectList(q).stream().map(this::toRecordDto).toList();
+        return memoryEventMapper.selectList(q).stream().map(this::toRecordDto).collect(Collectors.toList());
     }
 
     @Override
@@ -171,7 +174,7 @@ public class MemoryServiceImpl implements MemoryService {
         LambdaQueryWrapper<MemorySubscriptionEntity> q = new LambdaQueryWrapper<MemorySubscriptionEntity>()
                 .eq(MemorySubscriptionEntity::getSessionId, sessionId);
         if (taskId != null) {
-            q.in(MemorySubscriptionEntity::getTaskId, List.of(taskId, ""));
+            q.in(MemorySubscriptionEntity::getTaskId, Arrays.asList(taskId, ""));
         }
         return subscriptionMapper.selectList(q).stream().map(r -> {
             Map<String, Object> m = new HashMap<>();
@@ -181,7 +184,7 @@ public class MemoryServiceImpl implements MemoryService {
             m.put("cursor", r.getCursor());
             m.put("intent", r.getIntent());
             return m;
-        }).toList();
+        }).collect(Collectors.toList());
     }
 
     private MemoryRecordDto toRecordDto(MemoryEventEntity row) {

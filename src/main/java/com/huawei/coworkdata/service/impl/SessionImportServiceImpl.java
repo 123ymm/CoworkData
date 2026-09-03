@@ -8,6 +8,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -16,9 +18,9 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class SessionImportServiceImpl implements SessionImportService {
 
-    private static final List<String> TABLE_ORDER = List.of(
+    private static final List<String> TABLE_ORDER = Collections.unmodifiableList(Arrays.asList(
             "sessions", "tasks", "events", "memory_events",
-            "memory_subscriptions", "session_sse_events", "snapshots");
+            "memory_subscriptions", "session_sse_events", "snapshots"));
 
     private final JdbcTemplate jdbcTemplate;
 

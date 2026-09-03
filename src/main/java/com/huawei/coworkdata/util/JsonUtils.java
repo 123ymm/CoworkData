@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 
+import java.util.Collections;
 import java.util.Map;
 
 public final class JsonUtils {
@@ -29,11 +30,11 @@ public final class JsonUtils {
     }
 
     public static Map<String, Object> parseMap(String json) {
-        if (json == null || json.isBlank()) {
-            return Map.of();
+        if (json == null || json.trim().isEmpty()) {
+            return Collections.emptyMap();
         }
         try {
-            return MAPPER.readValue(json, new TypeReference<>() {
+            return MAPPER.readValue(json, new TypeReference<Map<String, Object>>() {
             });
         } catch (Exception e) {
             throw new IllegalStateException("JSON parse failed", e);

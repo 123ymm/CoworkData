@@ -7,7 +7,10 @@ import com.huawei.coworkdata.service.SkillReporterService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -16,9 +19,9 @@ import java.util.concurrent.ConcurrentHashMap;
 @Slf4j
 public class SkillReporterServiceImpl implements SkillReporterService {
 
-    private static final Set<String> TASK_TERMINAL_EVENTS = Set.of(
+    private static final Set<String> TASK_TERMINAL_EVENTS = Collections.unmodifiableSet(new HashSet<>(Arrays.asList(
             "TaskFinished", "TaskFailed", "TaskCanceled", "TaskFinalized"
-    );
+    )));
 
     private final Map<String, SessionEntryDto> sessionsStore = new ConcurrentHashMap<>();
     private final Map<String, Map<String, Object>> taskStartTime = new ConcurrentHashMap<>();
@@ -71,21 +74,23 @@ public class SkillReporterServiceImpl implements SkillReporterService {
     }
 
     private void handleTaskCreated(EventDto event) {
-        Map<String, Object> payload = event.getPayload() != null ? event.getPayload() : Map.of();
+        Map<String, Object> payload = event.getPayload() != null ? event.getPayload() : Collections.emptyMap();
         Object taskObj = payload.get("task");
-        if (!(taskObj instanceof Map<?, ?> taskData)) {
+        if (!(taskObj instanceof Map)) {
             return;
         }
+        Map<?, ?> taskData = (Map<?, ?>) taskObj;
         String taskId = stringVal(taskData.get("id"));
-        if (taskId == null || taskId.isBlank()) {
+        if (taskId == null || taskId.trim().isEmpty()) {
             return;
         }
         Object settings = taskData.get("settings");
         String skillName = null;
-        if (settings instanceof Map<?, ?> settingsMap) {
+        if (settings instanceof Map) {
+            Map<?, ?> settingsMap = (Map<?, ?>) settings;
             skillName = stringVal(settingsMap.get("skill_name"));
         }
-        if (skillName == null || skillName.isBlank()) {
+        if (skillName == null || skillName.trim().isEmpty()) {
             log.info("SkillReporter TASK_CREATED: skill_name is empty, skip");
             return;
         }

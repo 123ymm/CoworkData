@@ -18,9 +18,11 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -36,7 +38,7 @@ public class PostgresStateStoreServiceImpl implements PostgresStateStoreService 
     public List<SessionRecordDto> listSessions() {
         List<SessionEntity> rows = sessionMapper.selectList(
                 new LambdaQueryWrapper<SessionEntity>().orderByDesc(SessionEntity::getCreatedAt));
-        return rows.stream().map(this::toRecord).toList();
+        return rows.stream().map(this::toRecord).collect(Collectors.toList());
     }
 
     @Override
@@ -45,7 +47,7 @@ public class PostgresStateStoreServiceImpl implements PostgresStateStoreService 
                 new LambdaQueryWrapper<SessionEntity>()
                         .eq(SessionEntity::getUserId, userId)
                         .orderByDesc(SessionEntity::getCreatedAt));
-        return rows.stream().map(this::toRecord).toList();
+        return rows.stream().map(this::toRecord).collect(Collectors.toList());
     }
 
     @Override
@@ -71,14 +73,14 @@ public class PostgresStateStoreServiceImpl implements PostgresStateStoreService 
                                 .select(SessionEntity::getId))
                 .stream()
                 .map(SessionEntity::getId)
-                .toList();
+                .collect(Collectors.toList());
     }
 
     @Override
     public List<Map<String, Object>> loadTasks(String sessionId) {
         List<TaskEntity> rows = taskMapper.selectList(
                 new LambdaQueryWrapper<TaskEntity>().eq(TaskEntity::getSessionId, sessionId));
-        return rows.stream().map(this::toTaskDict).toList();
+        return rows.stream().map(this::toTaskDict).collect(Collectors.toList());
     }
 
     @Override
@@ -98,7 +100,7 @@ public class PostgresStateStoreServiceImpl implements PostgresStateStoreService 
                                 .orderByAsc(SessionSseEventEntity::getId))
                 .stream()
                 .map(SessionSseEventEntity::getEventJson)
-                .toList();
+                .collect(Collectors.toList());
     }
 
     @Override
@@ -160,8 +162,8 @@ public class PostgresStateStoreServiceImpl implements PostgresStateStoreService 
     public void ensureSessionForUpload(String sessionId, String userId) {
         SessionEntity existing = sessionMapper.selectById(sessionId);
         if (existing != null) {
-            if ((existing.getUserId() == null || existing.getUserId().isBlank())
-                    && userId != null && !userId.isBlank()) {
+            if ((existing.getUserId() == null || existing.getUserId().trim().isEmpty())
+                    && userId != null && !userId.trim().isEmpty()) {
                 updateUserId(sessionId, userId);
             }
             return;
@@ -225,7 +227,7 @@ public class PostgresStateStoreServiceImpl implements PostgresStateStoreService 
         map.put("user_prompt", row.getUserPrompt() != null ? row.getUserPrompt() : "");
         map.put("assigned_agent_id", row.getAssignedAgentId() != null ? row.getAssignedAgentId() : "");
         map.put("creator_agent_id", row.getCreatorAgentId() != null ? row.getCreatorAgentId() : "");
-        map.put("settings", Map.of());
+        map.put("settings", Collections.emptyMap());
         map.put("result", null);
         map.put("outputs", JsonUtils.parse(row.getOutputsJson(), Object.class));
         map.put("error", row.getError());

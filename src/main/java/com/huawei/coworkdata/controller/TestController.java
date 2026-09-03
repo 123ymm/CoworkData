@@ -6,6 +6,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 @RestController
@@ -14,10 +15,10 @@ public class TestController {
 
     @GetMapping("/hello")
     public Map<String, Object> hello(@RequestParam(defaultValue = "world") String name) {
-        return Map.of(
-                "message", "Hello, " + name + "!",
-                "timestamp", LocalDateTime.now().toString(),
-                "status", "ok"
-        );
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("message", "Hello, " + name + "!");
+        result.put("timestamp", LocalDateTime.now().toString());
+        result.put("status", "ok");
+        return result;
     }
 }

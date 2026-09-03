@@ -19,6 +19,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -43,7 +44,7 @@ public class SessionExportServiceImpl implements SessionExportService {
         }
 
         Map<String, Object> bundle = new LinkedHashMap<>();
-        bundle.put("sessions", List.of(sessionRow(session)));
+        bundle.put("sessions", Collections.singletonList(sessionRow(session)));
         bundle.put("tasks", taskRows(sessionId));
         bundle.put("events", eventRows(sessionId));
         bundle.put("session_sse_events", sseRows(sessionId));
@@ -163,7 +164,7 @@ public class SessionExportServiceImpl implements SessionExportService {
                             + " FROM memory_events WHERE session_id = ? ORDER BY timestamp, seq_no",
                     sessionId);
         } catch (Exception ex) {
-            return List.of();
+            return Collections.emptyList();
         }
     }
 
@@ -174,7 +175,7 @@ public class SessionExportServiceImpl implements SessionExportService {
                             + " FROM memory_subscriptions WHERE session_id = ?",
                     sessionId);
         } catch (Exception ex) {
-            return List.of();
+            return Collections.emptyList();
         }
     }
 }

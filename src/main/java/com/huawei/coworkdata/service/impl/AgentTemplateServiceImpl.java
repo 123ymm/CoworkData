@@ -11,6 +11,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -24,7 +25,7 @@ public class AgentTemplateServiceImpl implements AgentTemplateService {
                         .orderByAsc(AgentTemplateEntity::getName))
                 .stream()
                 .map(this::toDto)
-                .toList();
+                .collect(Collectors.toList());
     }
 
     @Override

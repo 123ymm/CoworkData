@@ -15,6 +15,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -30,12 +32,16 @@ public class MemoryController {
 
     @PostMapping("/ingest")
     public Map<String, String> ingest(@RequestBody MemoryIngestDto dto) {
-        return Map.of("id", memoryService.ingest(dto));
+        Map<String, String> result = new HashMap<>();
+        result.put("id", memoryService.ingest(dto));
+        return result;
     }
 
     @PostMapping("/fold")
     public Map<String, List<String>> fold(@RequestBody MemoryFoldRequest request) {
-        return Map.of("ids", memoryService.fold(request.getSupersedeIds(), request.getReplacements()));
+        Map<String, List<String>> result = new HashMap<>();
+        result.put("ids", memoryService.fold(request.getSupersedeIds(), request.getReplacements()));
+        return result;
     }
 
     @PostMapping("/load-view-raw")
@@ -64,11 +70,13 @@ public class MemoryController {
 
     @PostMapping("/subscriptions")
     public Map<String, String> subscribe(@RequestBody MemorySubscribeRequest request) {
-        return Map.of("id", memoryService.subscribe(
+        Map<String, String> result = new HashMap<>();
+        result.put("id", memoryService.subscribe(
                 request.getSessionId(),
                 request.getTaskId(),
                 request.getTopic(),
                 request.getIntent()));
+        return result;
     }
 
     @GetMapping("/subscriptions")
@@ -80,10 +88,11 @@ public class MemoryController {
 
     @GetMapping("/describe")
     public Map<String, Object> describe() {
-        return Map.of(
-                "name", "coworkdata_memory",
-                "supportsSemantic", false,
-                "supportsTopic", true,
-                "archivesSuperseded", true);
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("name", "coworkdata_memory");
+        result.put("supportsSemantic", false);
+        result.put("supportsTopic", true);
+        result.put("archivesSuperseded", true);
+        return result;
     }
 }

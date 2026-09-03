@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.HashMap;
 import java.util.Map;
 
 /**
@@ -60,6 +61,8 @@ public class PersistencePipelineController {
 
     @PostMapping("/reconcile/stranded-running-sessions")
     public Map<String, Integer> reconcileStrandedRunningSessions() {
-        return Map.of("reconciled", reconcileService.reconcileStrandedRunningSessions());
+        Map<String, Integer> result = new HashMap<>();
+        result.put("reconciled", reconcileService.reconcileStrandedRunningSessions());
+        return result;
     }
 }

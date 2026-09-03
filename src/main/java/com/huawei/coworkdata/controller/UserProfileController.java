@@ -43,7 +43,7 @@ public class UserProfileController {
     @PutMapping("/{userId}")
     public void save(@PathVariable String userId, @RequestBody UserProfileDto body) {
         body.setUserId(userId);
-        if (body.getUsername() == null || body.getUsername().isBlank()) {
+        if (body.getUsername() == null || body.getUsername().trim().isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "username is required");
         }
         userProfileService.save(body);

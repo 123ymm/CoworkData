@@ -27,6 +27,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -88,7 +89,9 @@ public class SessionController {
     /** 导入 Host 重写好 id 的 bundle */
     @PostMapping("/import-bundle")
     public Map<String, String> importBundle(@RequestBody Map<String, Object> bundle) {
-        return Map.of("sessionId", sessionImportService.importBundle(bundle));
+        Map<String, String> result = new HashMap<>();
+        result.put("sessionId", sessionImportService.importBundle(bundle));
+        return result;
     }
 
     /** 导出单会话表行 bundle（Host 组装 SQLite 用） */
@@ -130,13 +133,17 @@ public class SessionController {
     @GetMapping("/{sessionId}/workspace")
     public Map<String, String> getWorkspace(@PathVariable String sessionId) {
         String workspace = stateStore.getWorkspace(sessionId);
-        return Map.of("workspace", workspace != null ? workspace : "");
+        Map<String, String> result = new HashMap<>();
+        result.put("workspace", workspace != null ? workspace : "");
+        return result;
     }
 
     @GetMapping("/{sessionId}/status")
     public Map<String, String> getSessionStatus(@PathVariable String sessionId) {
         String status = stateStore.getSessionStatus(sessionId);
-        return Map.of("status", status != null ? status : "");
+        Map<String, String> result = new HashMap<>();
+        result.put("status", status != null ? status : "");
+        return result;
     }
 
     @PutMapping("/{sessionId}/status")

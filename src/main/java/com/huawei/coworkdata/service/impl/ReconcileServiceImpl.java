@@ -9,6 +9,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -33,12 +34,13 @@ public class ReconcileServiceImpl implements ReconcileService {
                 continue;
             }
             try {
-                List<EventDto> finished = eventStore.readSessionEventsOfTypes(sessionId, List.of("SessionFinished"));
+                List<EventDto> finished = eventStore.readSessionEventsOfTypes(
+                        sessionId, Collections.singletonList("SessionFinished"));
                 String finalStatus = "SUCCEEDED";
                 if (!finished.isEmpty()) {
                     EventDto last = finished.get(finished.size() - 1);
                     Object fs = last.getPayload() != null ? last.getPayload().get("final_status") : null;
-                    if (fs != null && !fs.toString().isBlank()) {
+                    if (fs != null && !fs.toString().trim().isEmpty()) {
                         finalStatus = fs.toString();
                     }
                 }

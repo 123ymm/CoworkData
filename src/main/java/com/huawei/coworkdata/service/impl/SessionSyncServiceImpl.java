@@ -16,6 +16,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.util.Collections;
 import java.util.List;
 
 @Service
@@ -46,7 +47,7 @@ public class SessionSyncServiceImpl implements SessionSyncService {
         if (request == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "request body is required");
         }
-        List<EventDto> events = request.getEvents() != null ? request.getEvents() : List.of();
+        List<EventDto> events = request.getEvents() != null ? request.getEvents() : Collections.emptyList();
 
         stateStore.ensureSessionForUpload(sessionId, request.getUserId());
         int previous = stateStore.getLastUploadIndex(sessionId);
@@ -60,7 +61,7 @@ public class SessionSyncServiceImpl implements SessionSyncService {
         int accepted = 0;
         int skipped = 0;
         for (EventDto event : events) {
-            if (event.getSessionId() == null || event.getSessionId().isBlank()) {
+            if (event.getSessionId() == null || event.getSessionId().trim().isEmpty()) {
                 event.setSessionId(sessionId);
             } else if (!sessionId.equals(event.getSessionId())) {
                 throw new ResponseStatusException(
@@ -88,7 +89,7 @@ public class SessionSyncServiceImpl implements SessionSyncService {
             newIndex = previous;
         }
         stateStore.updateLastUploadIndex(sessionId, newIndex);
-        if (request.getUserId() != null && !request.getUserId().isBlank()) {
+        if (request.getUserId() != null && !request.getUserId().trim().isEmpty()) {
             stateStore.updateUserId(sessionId, request.getUserId());
         }
 
@@ -122,7 +123,7 @@ public class SessionSyncServiceImpl implements SessionSyncService {
 
     @Override
     public List<SessionRecordDto> listByUserId(String userId) {
-        if (userId == null || userId.isBlank()) {
+        if (userId == null || userId.trim().isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "userId is required");
         }
         return stateStore.listSessionsByUserId(userId);

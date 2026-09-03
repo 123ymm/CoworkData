@@ -8,6 +8,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.Set;
 
 @Service
@@ -16,9 +19,9 @@ public class EventPersisterServiceImpl implements EventPersisterService {
 
     private static final Logger log = LoggerFactory.getLogger(EventPersisterServiceImpl.class);
 
-    private static final Set<String> TRANSIENT_EVENT_TYPES = Set.of(
+    private static final Set<String> TRANSIENT_EVENT_TYPES = Collections.unmodifiableSet(new HashSet<>(Arrays.asList(
             "text_delta", "reasoning_delta", "TextDelta", "ReasoningDelta"
-    );
+    )));
 
     private final PostgresEventStoreService eventStore;
 

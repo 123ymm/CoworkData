@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.HashMap;
 import java.util.Map;
 
 /**
@@ -27,13 +28,17 @@ public class DbInitController {
 
     @GetMapping("/resolve-url")
     public Map<String, String> resolveDbUrl(@RequestParam String url) {
-        return Map.of("resolvedUrl", dbInitService.resolveDbUrl(url));
+        Map<String, String> result = new HashMap<>();
+        result.put("resolvedUrl", dbInitService.resolveDbUrl(url));
+        return result;
     }
 
     @PostMapping("/tables")
     public Map<String, Object> createTables() {
         dbInitService.createTables();
-        return Map.of("tablesCreated", true);
+        Map<String, Object> result = new HashMap<>();
+        result.put("tablesCreated", true);
+        return result;
     }
 
     @PostMapping("/session-factory")

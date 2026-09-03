@@ -3,8 +3,9 @@ package com.huawei.coworkdata.util;
 import com.huawei.coworkdata.dto.EventDto;
 import com.huawei.coworkdata.entity.EventEntity;
 
+import java.util.Collections;
 import java.util.List;
-import java.util.Map;
+import java.util.stream.Collectors;
 
 public final class EventConverter {
 
@@ -39,13 +40,13 @@ public final class EventConverter {
         entity.setTenantId(event.getTenantId() != null ? event.getTenantId() : "default");
         entity.setTaskId(event.getTaskId());
         entity.setAgentId(event.getAgentId());
-        entity.setPayloadJson(JsonUtils.toJson(event.getPayload() != null ? event.getPayload() : Map.of()));
-        entity.setMetadataJson(JsonUtils.toJson(event.getMetadata() != null ? event.getMetadata() : Map.of()));
+        entity.setPayloadJson(JsonUtils.toJson(event.getPayload() != null ? event.getPayload() : Collections.emptyMap()));
+        entity.setMetadataJson(JsonUtils.toJson(event.getMetadata() != null ? event.getMetadata() : Collections.emptyMap()));
         entity.setCausationId(event.getCausationId());
         return entity;
     }
 
     public static List<EventDto> toDtoList(List<EventEntity> rows) {
-        return rows.stream().map(EventConverter::toDto).toList();
+        return rows.stream().map(EventConverter::toDto).collect(Collectors.toList());
     }
 }

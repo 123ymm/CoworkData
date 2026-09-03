@@ -33,6 +33,6 @@ curl "http://localhost:8080/api/sessions?userId=zhangsan"
 
 ## 技术栈
 
-- Java 21 / Spring Boot 3
+- Java 8 / Spring Boot 2.7
 - MyBatis-Plus
 - PostgreSQL

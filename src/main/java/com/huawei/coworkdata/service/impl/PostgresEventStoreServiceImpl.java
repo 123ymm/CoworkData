@@ -16,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -45,7 +46,7 @@ public class PostgresEventStoreServiceImpl implements PostgresEventStoreService 
     @Override
     @Transactional
     public boolean appendIfAbsent(EventDto event) {
-        if (event.getId() == null || event.getId().isBlank()) {
+        if (event.getId() == null || event.getId().trim().isEmpty()) {
             throw new IllegalArgumentException("event.id is required");
         }
         EventEntity existing = eventMapper.selectById(event.getId());
@@ -84,7 +85,7 @@ public class PostgresEventStoreServiceImpl implements PostgresEventStoreService 
     public Map<String, String> lastActivityTimes(List<String> excludeTypes) {
         List<String> excludes = excludeTypes != null && !excludeTypes.isEmpty()
                 ? excludeTypes
-                : List.of("SessionStatusChanged");
+                : Collections.singletonList("SessionStatusChanged");
         String excludeSql = excludes.stream()
                 .map(t -> "'" + t.replace("'", "''") + "'")
                 .reduce((a, b) -> a + "," + b)
@@ -94,7 +95,8 @@ public class PostgresEventStoreServiceImpl implements PostgresEventStoreService 
             String sessionId = stringValue(row.get("session_id"));
             Object ts = row.get("last_ts");
             if (sessionId != null && ts != null) {
-                if (ts instanceof OffsetDateTime odt) {
+                if (ts instanceof OffsetDateTime) {
+                    OffsetDateTime odt = (OffsetDateTime) ts;
                     result.put(sessionId, odt.withOffsetSameInstant(ZoneOffset.UTC).toString());
                 } else {
                     result.put(sessionId, ts.toString());

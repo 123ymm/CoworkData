@@ -10,6 +10,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -23,7 +24,7 @@ public class UserProfileServiceImpl implements UserProfileService {
                         .orderByAsc(UserProfileEntity::getUsername))
                 .stream()
                 .map(this::toDto)
-                .toList();
+                .collect(Collectors.toList());
     }
 
     @Override
