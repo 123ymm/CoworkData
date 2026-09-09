@@ -95,6 +95,7 @@
         </dependency>
     </dependencies>
     <build>
+        <finalName>cowork-data</finalName>
         <plugins>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
