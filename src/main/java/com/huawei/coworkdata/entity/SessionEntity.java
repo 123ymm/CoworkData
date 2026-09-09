@@ -1,6 +1,8 @@
 package com.huawei.coworkdata.entity;
 
+import com.baomidou.mybatisplus.annotation.FieldStrategy;
 import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableLogic;
 import com.baomidou.mybatisplus.annotation.TableName;
@@ -17,6 +19,8 @@ public class SessionEntity {
     private String tenantId;
     /** 会话所属用户（地端账号 / 工号等） */
     private String userId;
+    /** NOT NULL 列：INSERT 必须带值，避免策略省略后撞 DEFAULT 未部署的存量库 */
+    @TableField(insertStrategy = FieldStrategy.ALWAYS, updateStrategy = FieldStrategy.NOT_NULL)
     private String userPrompt;
     private String status;
     private String goal;

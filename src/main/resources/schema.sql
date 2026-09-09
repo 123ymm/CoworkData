@@ -2,7 +2,8 @@ CREATE TABLE IF NOT EXISTS sessions (
     id              VARCHAR(64) PRIMARY KEY,
     tenant_id       VARCHAR(64)  NOT NULL DEFAULT 'default',
     user_id         VARCHAR(128),
-    user_prompt     TEXT         NOT NULL,
+    -- DEFAULT ''：MyBatis 省略空/null 列时仍能 INSERT，避免 not-null 炸库
+    user_prompt     TEXT         NOT NULL DEFAULT '',
     status          VARCHAR(32)  NOT NULL DEFAULT 'RUNNING',
     goal            TEXT         NOT NULL DEFAULT '',
     root_agent_id   VARCHAR(64),

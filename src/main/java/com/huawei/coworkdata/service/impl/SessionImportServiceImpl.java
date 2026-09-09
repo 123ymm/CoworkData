@@ -51,6 +51,12 @@ public class SessionImportServiceImpl implements SessionImportService {
         if ("session_sse_events".equals(table)) {
             cols.remove("id");
         }
+        if ("sessions".equals(table)) {
+            Object up = cols.get("user_prompt");
+            if (up == null) {
+                cols.put("user_prompt", "");
+            }
+        }
         if (cols.isEmpty()) {
             return;
         }

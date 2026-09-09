@@ -191,8 +191,7 @@ public class ProjectionUpdaterServiceImpl implements ProjectionUpdaterService {
                 userId = stringVal(payload.get("username"));
             }
             entity.setUserId(userId);
-            entity.setUserPrompt(stringVal(payload.get("user_prompt")) != null
-                    ? stringVal(payload.get("user_prompt")) : "");
+            entity.setUserPrompt(payloadString(payload, "user_prompt", "userPrompt", ""));
             entity.setStatus("RUNNING");
             entity.setGoal("");
             entity.setRootAgentId(stringVal(payload.get("root_agent_id")));
@@ -289,7 +288,9 @@ public class ProjectionUpdaterServiceImpl implements ProjectionUpdaterService {
         entity.setTitle(stringVal(taskData.get("title")) != null ? stringVal(taskData.get("title")) : "");
         entity.setDescription(stringVal(taskData.get("description")) != null
                 ? stringVal(taskData.get("description")) : "");
-        entity.setUserPrompt(stringVal(taskData.get("user_prompt")));
+        // tasks.user_prompt 可空；显式缺省保持 null（与地端 TaskModel 一致）
+        String taskPrompt = firstString(taskData, "user_prompt", "userPrompt");
+        entity.setUserPrompt(taskPrompt);
         String assigned = stringVal(taskData.get("assigned_agent_id"));
         entity.setAssignedAgentId(assigned != null ? assigned : event.getAgentId());
         String creator = stringVal(taskData.get("creator_agent_id"));
@@ -336,5 +337,23 @@ public class ProjectionUpdaterServiceImpl implements ProjectionUpdaterService {
 
     private static String stringVal(Object value) {
         return value == null ? null : value.toString();
+    }
+
+    /** 读 snake_case / camelCase；null 时回落 defaultVal（sessions.user_prompt 用）。 */
+    private static String payloadString(
+            Map<String, Object> payload, String snake, String camel, String defaultVal) {
+        String s = firstString(payload, snake, camel);
+        return s != null ? s : defaultVal;
+    }
+
+    private static String firstString(Map<?, ?> map, String snake, String camel) {
+        if (map == null) {
+            return null;
+        }
+        Object v = map.get(snake);
+        if (v == null) {
+            v = map.get(camel);
+        }
+        return stringVal(v);
     }
 }
