@@ -49,7 +49,13 @@ public class SessionSyncServiceImpl implements SessionSyncService {
         }
         List<EventDto> events = request.getEvents() != null ? request.getEvents() : Collections.emptyList();
 
-        stateStore.ensureSessionForUpload(sessionId, request.getUserId());
+        stateStore.ensureSessionForUpload(
+                sessionId,
+                request.getUserId(),
+                request.getTenantId(),
+                request.getSource(),
+                request.getInstallId(),
+                request.getCoworkId());
         int previous = stateStore.getLastUploadIndex(sessionId);
 
         if (request.getUploadIndex() != null && request.getUploadIndex() < previous) {
@@ -89,9 +95,19 @@ public class SessionSyncServiceImpl implements SessionSyncService {
             newIndex = previous;
         }
         stateStore.updateLastUploadIndex(sessionId, newIndex);
-        if (request.getUserId() != null && !request.getUserId().trim().isEmpty()) {
-            stateStore.updateUserId(sessionId, request.getUserId());
+        String tenantId = request.getTenantId();
+        if ((tenantId == null || tenantId.trim().isEmpty())
+                && request.getUserId() != null && !request.getUserId().trim().isEmpty()
+                && request.getCoworkId() != null && !request.getCoworkId().trim().isEmpty()) {
+            tenantId = request.getUserId().trim() + ":" + request.getCoworkId().trim();
         }
+        stateStore.updateSessionIdentity(
+                sessionId,
+                request.getUserId(),
+                tenantId,
+                request.getSource(),
+                request.getInstallId(),
+                request.getCoworkId());
 
         SessionUploadResultDto result = new SessionUploadResultDto();
         result.setSessionId(sessionId);

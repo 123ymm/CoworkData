@@ -59,7 +59,7 @@ com.huawei.coworkdata
 2. **会话 ID 放路径**：`/sessions/{sessionId}/...`。
 3. **会话全量事件回放**走 `GET /sessions/{sessionId}/events`（不再用 `/events/sessions/{id}`）。
 4. **流水线**：`POST /events/pipeline` 一次完成落库 → 投影 → 快照。
-5. **列表按用户**：`GET /sessions?userId=`（不再提供无条件全量列表）。
+5. **列表按用户**：`GET /sessions?userId=`（**必须**带 **surrogate_id**，不再提供无条件全量列表）。
 
 典型调用关系：
 
@@ -105,8 +105,11 @@ Host / 前端 ──HTTP──▶ CoworkData REST
 ```json
 {
   "id": "ses_xxx",
-  "tenantId": "default",
-  "userId": "zhangsan",
+  "tenantId": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee:my-cowork",
+  "userId": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+  "coworkId": "my-cowork",
+  "source": "local",
+  "installId": "11111111-2222-3333-4444-555555555555",
   "userPrompt": "用户首条输入",
   "status": "RUNNING",
   "goal": "",
@@ -126,6 +129,10 @@ Host / 前端 ──HTTP──▶ CoworkData REST
 
 合法 `status`：`RUNNING`、`SUCCEEDED`、`FAILED`、`CANCELED`、`INTERRUPTED`、`PAUSED_HITL`、`PAUSED`。
 
+- **`userId`**：substrate JWT `sub`（**surrogate_id**），不是工号；工号在 `user_profile.username`
+- **`tenantId`**：`{userId}:{coworkId}`；缺一侧时可能仍为历史值 `default`
+- **`source`**：`local`（地端上传）或 `cloud`
+- **`installId`**：Electron 安装 UUID
 - `lastUploadIndex`：地端 cowork 上次上传到的进度索引，默认 `0`
 - `deleteAt`：软删时间；`null` 表示未删除。列表/查询自动过滤已软删行
 
@@ -236,8 +243,8 @@ Host / 前端 ──HTTP──▶ CoworkData REST
 ### 调用示例
 
 ```bash
-# 按用户列表
-curl "http://localhost:8080/api/sessions?userId=zhangsan"
+# 按用户列表（userId = surrogate_id）
+curl "http://localhost:8080/api/sessions?userId=aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
 
 # 上传水位
 curl http://localhost:8080/api/sessions/ses_abc123/upload-watermark
@@ -246,7 +253,11 @@ curl http://localhost:8080/api/sessions/ses_abc123/upload-watermark
 curl -X POST http://localhost:8080/api/sessions/ses_abc123/upload \
   -H "Content-Type: application/json" \
   -d '{
-    "userId": "zhangsan",
+    "userId": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+    "coworkId": "my-cowork",
+    "source": "local",
+    "installId": "11111111-2222-3333-4444-555555555555",
+    "tenantId": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee:my-cowork",
     "uploadIndex": 50,
     "events": [
       {
@@ -256,8 +267,8 @@ curl -X POST http://localhost:8080/api/sessions/ses_abc123/upload \
         "sessionId": "ses_abc123",
         "type": "SessionCreated",
         "timestamp": "2026-08-24T12:00:00+08:00",
-        "tenantId": "default",
-        "payload": { "user_prompt": "你好", "user_id": "zhangsan" }
+        "tenantId": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee:my-cowork",
+        "payload": { "user_prompt": "你好", "user_id": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee", "cowork_id": "my-cowork" }
       }
     ]
   }'
@@ -283,7 +294,8 @@ curl -X DELETE http://localhost:8080/api/sessions/ses_abc123
 
 增量上传说明：
 
-- `userId`：写入 `sessions.user_id`，供按人列表查询
+- `userId`：写入 `sessions.user_id`（**surrogate_id** / JWT `sub`），供按人列表查询
+- `coworkId` / `source` / `installId` / `tenantId`：写入对应列；`tenantId` 缺省且两侧齐全时服务端拼 `{userId}:{coworkId}`
 - `uploadIndex`：新水位；省略则为「旧水位 + 新写入事件数」
 - 事件按 `id` 幂等；`uploadIndex < 当前水位` → **409**
 - 会话不存在时自动创建最小投影行
@@ -425,6 +437,7 @@ curl -X POST http://localhost:8080/api/reconcile/stranded-running-sessions
 | `POST` | `/api/db/tables` | `create_tables` | 执行 `schema.sql` 建表 |
 | `POST` | `/api/db/session-factory?databaseUrl=...` | `create_session_factory` | 返回解析后的 URL 与驱动提示（Java 侧无 factory 对象） |
 | `POST` | `/api/db/init?databaseUrl=` | `init_db` | 建表 + 返回初始化信息；`databaseUrl` 可选 |
+| `POST` | `/api/db/migrate-identity` | （Java） | 执行 V4 DDL + 工号 `user_id`→surrogate 映射（需 `substrate.base-url`） |
 | `PUT` | `/api/db/skill-reporter/sessions-store` | `set_sessions_store` | 注入 SkillReporter 用的 session 用户上下文 |
 
 ### 调用示例
@@ -550,7 +563,7 @@ GET /api/events/last-activity-times
 **Controller：** `UserProfileController`  
 **前缀：** `/api/user-profiles`
 
-地端 OAuth 用户字典（`user_id` ↔ `username`）。与 `sessions.user_id` 无外键，仅作展示/反查。
+地端用户字典：`user_id` = **surrogate_id**（JWT `sub`），`username` = 工号（W3 uid）。与 `sessions.user_id` 无外键，仅作展示/反查。
 
 | 方法 | 路径 | 作用 |
 |------|------|------|
@@ -562,10 +575,31 @@ GET /api/events/last-activity-times
 请求 / 响应示例：
 
 ```json
-{ "userId": "99", "username": "alice" }
+{ "userId": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee", "username": "w30040833" }
 ```
 
-地端在会话增量上传时，若能解析到 OAuth `id` + `username`，会一并 upsert。
+地端在会话增量上传时，若能解析到 OAuth `id`（surrogate）+ `username`（工号），会一并 upsert。
+
+---
+
+## 9.6.2 Cowork / Cowork Permission API
+
+**Controller：** `CoworkController`
+
+| 方法 | 路径 | 作用 |
+|------|------|------|
+| `GET` | `/api/coworks` | 列出全部 cowork |
+| `GET` | `/api/coworks/{coworkId}` | 单条 |
+| `PUT` | `/api/coworks/{coworkId}` | upsert；body 可含 `name` |
+| `DELETE` | `/api/coworks/{coworkId}` | 删除（顺带删 permission） |
+| `GET` | `/api/cowork-permissions/{coworkId}` | 读 LLM 权限 |
+| `PUT` | `/api/cowork-permissions/{coworkId}` | upsert；`llm` 为 JSON 数组文本 |
+| `DELETE` | `/api/cowork-permissions/{coworkId}` | 删权限行 |
+
+```json
+{ "coworkId": "my-cowork", "name": "My Cowork" }
+{ "coworkId": "my-cowork", "llm": "[\"accountA\",\"accountB\"]" }
+```
 
 ---
 

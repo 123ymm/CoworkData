@@ -1,7 +1,14 @@
 CREATE TABLE IF NOT EXISTS sessions (
     id              VARCHAR(64) PRIMARY KEY,
-    tenant_id       VARCHAR(64)  NOT NULL DEFAULT 'default',
+    -- tenant_id = "{user_id}:{cowork_id}"（surrogate_id:cowork_id）；缺一侧时可为 default
+    tenant_id       VARCHAR(256) NOT NULL DEFAULT 'default',
+    -- user_id = substrate JWT sub（surrogate_id）；username 在 user_profile
     user_id         VARCHAR(128),
+    cowork_id       VARCHAR(128),
+    -- local = 地端上传；cloud = 云端原生
+    source          VARCHAR(16)  NOT NULL DEFAULT 'local',
+    -- Electron 安装 UUID（主机名/安装 id）
+    install_id      VARCHAR(64),
     -- DEFAULT ''：MyBatis 省略空/null 列时仍能 INSERT，避免 not-null 炸库
     user_prompt     TEXT         NOT NULL DEFAULT '',
     status          VARCHAR(32)  NOT NULL DEFAULT 'RUNNING',
@@ -21,6 +28,9 @@ CREATE TABLE IF NOT EXISTS sessions (
 
 CREATE INDEX IF NOT EXISTS ix_sessions_tenant_id ON sessions (tenant_id);
 CREATE INDEX IF NOT EXISTS ix_sessions_user_id ON sessions (user_id);
+CREATE INDEX IF NOT EXISTS ix_sessions_cowork_id ON sessions (cowork_id);
+CREATE INDEX IF NOT EXISTS ix_sessions_source ON sessions (source);
+CREATE INDEX IF NOT EXISTS ix_sessions_install_id ON sessions (install_id);
 CREATE INDEX IF NOT EXISTS ix_sessions_status ON sessions (status);
 CREATE INDEX IF NOT EXISTS ix_sessions_delete_at ON sessions (delete_at);
 
@@ -49,7 +59,7 @@ CREATE TABLE IF NOT EXISTS events (
     session_id    VARCHAR(64) NOT NULL,
     task_id       VARCHAR(64),
     agent_id      VARCHAR(64),
-    tenant_id     VARCHAR(64)  NOT NULL DEFAULT 'default',
+    tenant_id     VARCHAR(256) NOT NULL DEFAULT 'default',
     type          VARCHAR(128) NOT NULL,
     sequence      INTEGER      NOT NULL,
     payload_json  TEXT         NOT NULL DEFAULT '{}',
@@ -136,9 +146,20 @@ CREATE TABLE IF NOT EXISTS agent_templates (
 
 CREATE INDEX IF NOT EXISTS ix_agent_templates_name ON agent_templates (name);
 
+-- user_id = substrate surrogate_id（JWT sub）；username = 工号（W3 uid）
 CREATE TABLE IF NOT EXISTS user_profile (
     user_id   VARCHAR(128) PRIMARY KEY,
     username  VARCHAR(256) NOT NULL
 );
 
 CREATE INDEX IF NOT EXISTS ix_user_profile_username ON user_profile (username);
+
+CREATE TABLE IF NOT EXISTS cowork (
+    cowork_id VARCHAR(128) PRIMARY KEY,
+    name      VARCHAR(256) NOT NULL DEFAULT ''
+);
+
+CREATE TABLE IF NOT EXISTS cowork_permission (
+    cowork_id VARCHAR(128) PRIMARY KEY REFERENCES cowork (cowork_id),
+    llm       TEXT         NOT NULL DEFAULT '[]'
+);

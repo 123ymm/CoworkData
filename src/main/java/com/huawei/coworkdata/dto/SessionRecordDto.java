@@ -10,8 +10,13 @@ public class SessionRecordDto {
 
     private String id;
     private String tenantId;
-    /** 会话所属用户（地端账号 / 工号等） */
+    /** substrate JWT sub（surrogate_id） */
     private String userId;
+    private String coworkId;
+    /** local | cloud */
+    private String source;
+    /** Electron 安装 UUID */
+    private String installId;
     private String userPrompt;
     private String status;
     private String goal;

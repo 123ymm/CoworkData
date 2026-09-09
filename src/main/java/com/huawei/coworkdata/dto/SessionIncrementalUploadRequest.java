@@ -14,8 +14,20 @@ import java.util.List;
 @Data
 public class SessionIncrementalUploadRequest {
 
-    /** 会话所属用户；首次上传建议带上，写入 sessions.user_id */
+    /** 会话所属用户（surrogate_id / JWT sub）；首次上传建议带上，写入 sessions.user_id */
     private String userId;
+
+    /** cowork 套件 id */
+    private String coworkId;
+
+    /** local | cloud */
+    private String source;
+
+    /** Electron 安装 UUID */
+    private String installId;
+
+    /** "{userId}:{coworkId}"；缺省由服务端在有两侧时拼接 */
+    private String tenantId;
 
     /** 本次上传后的新水位；若为空，则用「当前水位 + 成功写入事件数」 */
     private Integer uploadIndex;

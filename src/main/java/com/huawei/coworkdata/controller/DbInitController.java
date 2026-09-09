@@ -2,6 +2,7 @@ package com.huawei.coworkdata.controller;
 
 import com.huawei.coworkdata.dto.SessionsStoreRequest;
 import com.huawei.coworkdata.service.DbInitService;
+import com.huawei.coworkdata.service.IdentityMigrationService;
 import com.huawei.coworkdata.service.SkillReporterService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -25,6 +26,7 @@ public class DbInitController {
 
     private final DbInitService dbInitService;
     private final SkillReporterService skillReporter;
+    private final IdentityMigrationService identityMigrationService;
 
     @GetMapping("/resolve-url")
     public Map<String, String> resolveDbUrl(@RequestParam String url) {
@@ -49,6 +51,14 @@ public class DbInitController {
     @PostMapping("/init")
     public Map<String, Object> initDb(@RequestParam(required = false) String databaseUrl) {
         return dbInitService.initDb(databaseUrl);
+    }
+
+    /**
+     * 工号 user_id → surrogate_id（JWT sub）迁移；需配置 substrate.base-url。
+     */
+    @PostMapping("/migrate-identity")
+    public Map<String, Object> migrateIdentity() {
+        return identityMigrationService.migrateIdentity();
     }
 
     @PutMapping("/skill-reporter/sessions-store")

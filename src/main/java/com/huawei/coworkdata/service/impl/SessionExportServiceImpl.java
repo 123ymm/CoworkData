@@ -58,6 +58,10 @@ public class SessionExportServiceImpl implements SessionExportService {
         Map<String, Object> row = new LinkedHashMap<>();
         row.put("id", s.getId());
         row.put("tenant_id", s.getTenantId());
+        row.put("user_id", s.getUserId());
+        row.put("cowork_id", s.getCoworkId());
+        row.put("source", s.getSource());
+        row.put("install_id", s.getInstallId());
         row.put("user_prompt", s.getUserPrompt());
         row.put("status", s.getStatus());
         row.put("goal", s.getGoal());

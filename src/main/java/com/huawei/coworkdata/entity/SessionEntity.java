@@ -16,9 +16,15 @@ public class SessionEntity {
 
     @TableId(type = IdType.INPUT)
     private String id;
+    /** "{user_id}:{cowork_id}"；缺一侧时可为 default */
     private String tenantId;
-    /** 会话所属用户（地端账号 / 工号等） */
+    /** substrate JWT sub（surrogate_id） */
     private String userId;
+    private String coworkId;
+    /** local | cloud */
+    private String source;
+    /** Electron 安装 UUID */
+    private String installId;
     /** NOT NULL 列：INSERT 必须带值，避免策略省略后撞 DEFAULT 未部署的存量库 */
     @TableField(insertStrategy = FieldStrategy.ALWAYS, updateStrategy = FieldStrategy.NOT_NULL)
     private String userPrompt;

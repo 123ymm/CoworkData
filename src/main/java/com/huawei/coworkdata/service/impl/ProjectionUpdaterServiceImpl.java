@@ -184,13 +184,25 @@ public class ProjectionUpdaterServiceImpl implements ProjectionUpdaterService {
         if (existing == null) {
             SessionEntity entity = new SessionEntity();
             entity.setId(event.getSessionId());
-            entity.setTenantId(stringVal(payload.get("tenant_id")) != null
-                    ? stringVal(payload.get("tenant_id")) : event.getTenantId());
             String userId = stringVal(payload.get("user_id"));
             if (userId == null || userId.trim().isEmpty()) {
                 userId = stringVal(payload.get("username"));
             }
             entity.setUserId(userId);
+            String coworkId = stringVal(payload.get("cowork_id"));
+            entity.setCoworkId(coworkId);
+            String source = stringVal(payload.get("source"));
+            entity.setSource(source != null ? source : "local");
+            entity.setInstallId(stringVal(payload.get("install_id")));
+            String tenant = stringVal(payload.get("tenant_id"));
+            if (tenant == null) {
+                tenant = event.getTenantId();
+            }
+            if ((tenant == null || tenant.trim().isEmpty() || "default".equals(tenant))
+                    && userId != null && coworkId != null) {
+                tenant = userId + ":" + coworkId;
+            }
+            entity.setTenantId(tenant != null ? tenant : "default");
             entity.setUserPrompt(payloadString(payload, "user_prompt", "userPrompt", ""));
             entity.setStatus("RUNNING");
             entity.setGoal("");

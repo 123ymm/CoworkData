@@ -16,6 +16,10 @@ coworkdata:
     keep: 3
     every-n-events: 50
 
+# 身份迁移 POST /api/db/migrate-identity 调用 local-token 用；也可用环境变量 SUBSTRATE_BASE_URL
+substrate:
+  base-url: ${SUBSTRATE_BASE_URL:}
+
 mybatis-plus:
   configuration:
     map-underscore-to-camel-case: true

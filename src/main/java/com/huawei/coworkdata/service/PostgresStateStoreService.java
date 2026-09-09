@@ -36,7 +36,12 @@ public interface PostgresStateStoreService {
     void updateUserId(String sessionId, String userId);
 
     /** 若不存在则创建一条最小会话投影（用于地端增量上传） */
-    void ensureSessionForUpload(String sessionId, String userId);
+    void ensureSessionForUpload(String sessionId, String userId,
+                                String tenantId, String source, String installId, String coworkId);
+
+    /** 上传后补全会话身份字段（非空才覆盖） */
+    void updateSessionIdentity(String sessionId, String userId, String tenantId,
+                               String source, String installId, String coworkId);
 
     void deleteSession(String sessionId);
 }

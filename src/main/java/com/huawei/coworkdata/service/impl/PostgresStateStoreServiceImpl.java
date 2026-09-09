@@ -159,19 +159,71 @@ public class PostgresStateStoreServiceImpl implements PostgresStateStoreService 
 
     @Override
     @Transactional
-    public void ensureSessionForUpload(String sessionId, String userId) {
+    public void updateSessionIdentity(String sessionId, String userId, String tenantId,
+                                      String source, String installId, String coworkId) {
+        SessionEntity update = new SessionEntity();
+        update.setId(sessionId);
+        boolean any = false;
+        if (userId != null && !userId.trim().isEmpty()) {
+            update.setUserId(userId.trim());
+            any = true;
+        }
+        if (tenantId != null && !tenantId.trim().isEmpty()) {
+            update.setTenantId(tenantId.trim());
+            any = true;
+        }
+        if (source != null && !source.trim().isEmpty()) {
+            update.setSource(source.trim());
+            any = true;
+        }
+        if (installId != null && !installId.trim().isEmpty()) {
+            update.setInstallId(installId.trim());
+            any = true;
+        }
+        if (coworkId != null && !coworkId.trim().isEmpty()) {
+            update.setCoworkId(coworkId.trim());
+            any = true;
+        }
+        if (any) {
+            sessionMapper.updateById(update);
+        }
+    }
+
+    @Override
+    @Transactional
+    public void ensureSessionForUpload(String sessionId, String userId,
+                                       String tenantId, String source, String installId, String coworkId) {
         SessionEntity existing = sessionMapper.selectById(sessionId);
         if (existing != null) {
-            if ((existing.getUserId() == null || existing.getUserId().trim().isEmpty())
-                    && userId != null && !userId.trim().isEmpty()) {
-                updateUserId(sessionId, userId);
-            }
+            updateSessionIdentity(sessionId,
+                    (existing.getUserId() == null || existing.getUserId().trim().isEmpty()) ? userId : null,
+                    (existing.getTenantId() == null || existing.getTenantId().trim().isEmpty()
+                            || "default".equals(existing.getTenantId())) ? tenantId : null,
+                    (existing.getSource() == null || existing.getSource().trim().isEmpty()) ? source : null,
+                    (existing.getInstallId() == null || existing.getInstallId().trim().isEmpty()) ? installId : null,
+                    (existing.getCoworkId() == null || existing.getCoworkId().trim().isEmpty()) ? coworkId : null);
             return;
+        }
+        String resolvedCowork = blankToNull(coworkId);
+        String resolvedUser = blankToNull(userId);
+        String resolvedTenant = blankToNull(tenantId);
+        if (resolvedTenant == null && resolvedUser != null && resolvedCowork != null) {
+            resolvedTenant = resolvedUser + ":" + resolvedCowork;
+        }
+        if (resolvedTenant == null) {
+            resolvedTenant = "default";
+        }
+        String resolvedSource = blankToNull(source);
+        if (resolvedSource == null) {
+            resolvedSource = "local";
         }
         SessionEntity entity = new SessionEntity();
         entity.setId(sessionId);
-        entity.setTenantId("default");
-        entity.setUserId(userId);
+        entity.setTenantId(resolvedTenant);
+        entity.setUserId(resolvedUser);
+        entity.setCoworkId(resolvedCowork);
+        entity.setSource(resolvedSource);
+        entity.setInstallId(blankToNull(installId));
         entity.setUserPrompt("");
         entity.setStatus("RUNNING");
         entity.setGoal("");
@@ -181,6 +233,13 @@ public class PostgresStateStoreServiceImpl implements PostgresStateStoreService 
         entity.setLastUploadIndex(0);
         entity.setCreatedAt(OffsetDateTime.now());
         sessionMapper.insert(entity);
+    }
+
+    private static String blankToNull(String s) {
+        if (s == null || s.trim().isEmpty()) {
+            return null;
+        }
+        return s.trim();
     }
 
     @Override
@@ -195,6 +254,9 @@ public class PostgresStateStoreServiceImpl implements PostgresStateStoreService 
         dto.setId(row.getId());
         dto.setTenantId(row.getTenantId());
         dto.setUserId(row.getUserId());
+        dto.setCoworkId(row.getCoworkId());
+        dto.setSource(row.getSource());
+        dto.setInstallId(row.getInstallId());
         dto.setUserPrompt(row.getUserPrompt());
         dto.setStatus(row.getStatus());
         dto.setGoal(row.getGoal() != null ? row.getGoal() : "");
