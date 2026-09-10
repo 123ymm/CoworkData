@@ -112,6 +112,7 @@ public class PostgresStateStoreServiceImpl implements PostgresStateStoreService 
         SessionEntity update = new SessionEntity();
         update.setId(sessionId);
         update.setWorkspace(workspace);
+        update.setUpdatedAt(OffsetDateTime.now());
         int updated = sessionMapper.updateById(update);
         if (updated == 0) {
             log.warn("save_workspace: session {} row not found", sessionId);
@@ -136,6 +137,7 @@ public class PostgresStateStoreServiceImpl implements PostgresStateStoreService 
         SessionEntity update = new SessionEntity();
         update.setId(sessionId);
         update.setStatus(status);
+        update.setUpdatedAt(OffsetDateTime.now());
         sessionMapper.updateById(update);
     }
 
@@ -145,6 +147,7 @@ public class PostgresStateStoreServiceImpl implements PostgresStateStoreService 
         SessionEntity update = new SessionEntity();
         update.setId(sessionId);
         update.setLastUploadIndex(lastUploadIndex);
+        update.setUpdatedAt(OffsetDateTime.now());
         int updated = sessionMapper.updateById(update);
         if (updated == 0) {
             log.warn("update_last_upload_index: session {} row not found", sessionId);
@@ -244,14 +247,18 @@ public class PostgresStateStoreServiceImpl implements PostgresStateStoreService 
         entity.setConfigJson("{}");
         entity.setLastUploadIndex(0);
         entity.setCreatedAt(OffsetDateTime.now());
+        entity.setUpdatedAt(OffsetDateTime.now());
         sessionMapper.insert(entity);
     }
 
     @Override
     @Transactional
     public void backfillSessionProjection(String sessionId, String userPrompt, String goal,
-                                          String title, String llmProvider, String llmModel,
-                                          String configJson) {
+                                          String title, String status, String rootAgentId,
+                                          String llmProvider, String llmModel,
+                                          Long tokenBudget, Integer failureCounter,
+                                          String configJson, String workspace,
+                                          OffsetDateTime createdAt) {
         SessionEntity existing = sessionMapper.selectById(sessionId);
         if (existing == null) {
             return;
@@ -259,26 +266,58 @@ public class PostgresStateStoreServiceImpl implements PostgresStateStoreService 
         SessionEntity update = new SessionEntity();
         update.setId(sessionId);
         boolean any = false;
-        if (!isBlank(userPrompt) && isBlank(existing.getUserPrompt())) {
+        // 地上游为准：请求非空则覆盖（修复 ensureSession 空壳 + SessionCreated 被跳过）
+        if (!isBlank(userPrompt) && !userPrompt.trim().equals(
+                existing.getUserPrompt() != null ? existing.getUserPrompt() : "")) {
             update.setUserPrompt(userPrompt.trim());
             any = true;
         }
-        if (!isBlank(goal) && isBlank(existing.getGoal())) {
+        if (!isBlank(goal) && !goal.trim().equals(
+                existing.getGoal() != null ? existing.getGoal() : "")) {
             update.setGoal(goal.trim());
             any = true;
         }
-        // title 为用户手动命名：地端非空则覆盖（允许改名后再次同步）
         if (!isBlank(title) && !title.trim().equals(
                 existing.getTitle() != null ? existing.getTitle() : "")) {
             update.setTitle(title.trim());
             any = true;
         }
-        if (!isBlank(llmProvider) && isBlank(existing.getLlmProvider())) {
+        if (!isBlank(status) && !status.trim().equals(
+                existing.getStatus() != null ? existing.getStatus() : "")) {
+            update.setStatus(status.trim());
+            any = true;
+        }
+        if (!isBlank(rootAgentId) && !rootAgentId.trim().equals(
+                existing.getRootAgentId() != null ? existing.getRootAgentId() : "")) {
+            update.setRootAgentId(rootAgentId.trim());
+            any = true;
+        }
+        if (!isBlank(llmProvider) && !llmProvider.trim().equals(
+                existing.getLlmProvider() != null ? existing.getLlmProvider() : "")) {
             update.setLlmProvider(llmProvider.trim());
             any = true;
         }
-        if (!isBlank(llmModel) && isBlank(existing.getLlmModel())) {
+        if (!isBlank(llmModel) && !llmModel.trim().equals(
+                existing.getLlmModel() != null ? existing.getLlmModel() : "")) {
             update.setLlmModel(llmModel.trim());
+            any = true;
+        }
+        if (tokenBudget != null && !tokenBudget.equals(existing.getTokenBudget())) {
+            update.setTokenBudget(tokenBudget);
+            any = true;
+        }
+        if (failureCounter != null && !failureCounter.equals(existing.getFailureCounter())) {
+            update.setFailureCounter(failureCounter);
+            any = true;
+        }
+        if (!isBlank(workspace) && !workspace.trim().equals(
+                existing.getWorkspace() != null ? existing.getWorkspace() : "")) {
+            update.setWorkspace(workspace.trim());
+            any = true;
+        }
+        if (createdAt != null && (existing.getCreatedAt() == null
+                || !createdAt.isEqual(existing.getCreatedAt()))) {
+            update.setCreatedAt(createdAt);
             any = true;
         }
         if (!isBlank(configJson)) {
@@ -289,7 +328,6 @@ public class PostgresStateStoreServiceImpl implements PostgresStateStoreService 
                 if (cur != null) {
                     merged.putAll(cur);
                 }
-                // 地上游为准：同键覆盖，补全新键（reasoning_effort / template_id 等）
                 merged.putAll(incoming);
                 String mergedJson = JsonUtils.toJson(merged);
                 if (!mergedJson.equals(existing.getConfigJson() != null
@@ -300,6 +338,7 @@ public class PostgresStateStoreServiceImpl implements PostgresStateStoreService 
             }
         }
         if (any) {
+            update.setUpdatedAt(OffsetDateTime.now());
             sessionMapper.updateById(update);
         }
     }

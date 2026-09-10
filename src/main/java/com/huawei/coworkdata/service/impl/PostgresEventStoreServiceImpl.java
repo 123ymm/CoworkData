@@ -119,6 +119,19 @@ public class PostgresEventStoreServiceImpl implements PostgresEventStoreService 
     @Override
     @Transactional
     public void saveSnapshot(RunSnapshotDto snapshot) {
+        SnapshotEntity existing = snapshotMapper.selectById(snapshot.getId());
+        if (existing != null) {
+            existing.setSessionId(snapshot.getSessionId());
+            existing.setLastEventId(snapshot.getLastEventId());
+            existing.setLastEventSequence(snapshot.getLastEventSequence());
+            existing.setStateBlobJson(JsonUtils.toJson(snapshot.getStateBlob()));
+            existing.setSnapshotReason(snapshot.getSnapshotReason() != null ? snapshot.getSnapshotReason() : "");
+            if (snapshot.getSnapshotAt() != null) {
+                existing.setCreatedAt(snapshot.getSnapshotAt());
+            }
+            snapshotMapper.updateById(existing);
+            return;
+        }
         SnapshotEntity entity = new SnapshotEntity();
         entity.setId(snapshot.getId());
         entity.setSessionId(snapshot.getSessionId());
@@ -126,7 +139,7 @@ public class PostgresEventStoreServiceImpl implements PostgresEventStoreService 
         entity.setLastEventSequence(snapshot.getLastEventSequence());
         entity.setStateBlobJson(JsonUtils.toJson(snapshot.getStateBlob()));
         entity.setSnapshotReason(snapshot.getSnapshotReason() != null ? snapshot.getSnapshotReason() : "");
-        entity.setCreatedAt(snapshot.getSnapshotAt());
+        entity.setCreatedAt(snapshot.getSnapshotAt() != null ? snapshot.getSnapshotAt() : OffsetDateTime.now());
         snapshotMapper.insert(entity);
         snapshotMapper.pruneOldSnapshots(snapshot.getSessionId(), Math.max(1, keepSnapshots));
     }

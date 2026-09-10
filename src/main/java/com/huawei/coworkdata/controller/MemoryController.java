@@ -75,7 +75,10 @@ public class MemoryController {
                 request.getSessionId(),
                 request.getTaskId(),
                 request.getTopic(),
-                request.getIntent()));
+                request.getIntent(),
+                request.getId(),
+                request.getCursor(),
+                request.getCreatedAt()));
         return result;
     }
 

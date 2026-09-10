@@ -235,7 +235,11 @@ public class ProjectionUpdaterServiceImpl implements ProjectionUpdaterService {
             entity.setTitle("");
             entity.setGoal("");
             entity.setRootAgentId(stringVal(payload.get("root_agent_id")));
-            entity.setLlmProvider(stringVal(payload.get("llm_account")));
+            String llmAccount = stringVal(payload.get("llm_account"));
+            if (isBlank(llmAccount)) {
+                llmAccount = stringVal(payload.get("llm_provider"));
+            }
+            entity.setLlmProvider(llmAccount);
             entity.setLlmModel(stringVal(payload.get("llm_model")));
             Object budget = payload.get("token_budget");
             entity.setTokenBudget(budget instanceof Number ? ((Number) budget).longValue() : 200_000L);
@@ -272,6 +276,9 @@ public class ProjectionUpdaterServiceImpl implements ProjectionUpdaterService {
         }
         if (isBlank(existing.getLlmProvider())) {
             String provider = stringVal(payload.get("llm_account"));
+            if (isBlank(provider)) {
+                provider = stringVal(payload.get("llm_provider"));
+            }
             if (!isBlank(provider)) {
                 update.setLlmProvider(provider);
                 dirty = true;

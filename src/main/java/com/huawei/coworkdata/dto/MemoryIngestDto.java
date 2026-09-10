@@ -20,6 +20,12 @@ public class MemoryIngestDto {
     private String content;
     private Map<String, Object> metadata;
     private OffsetDateTime timestamp;
+    /** 地端透传：与本地 memory_events.seq_no 对齐；缺省由云端自增 */
+    private Integer seqNo;
+    /** 地端透传：与本地 topic_seq_no 对齐 */
+    private Integer topicSeqNo;
+    /** 地端透传：是否已 fold 标记 */
+    private Boolean isSuperseded;
     /** PUBLICATION 写入前 supersede 同 topic 旧行 */
     private boolean supersedePublicationTopic;
 }

@@ -113,9 +113,15 @@ public class SessionSyncServiceImpl implements SessionSyncService {
                 request.getUserPrompt(),
                 request.getGoal(),
                 request.getTitle(),
+                request.getStatus(),
+                request.getRootAgentId(),
                 request.getLlmProvider(),
                 request.getLlmModel(),
-                request.getConfigJson());
+                request.getTokenBudget(),
+                request.getFailureCounter(),
+                request.getConfigJson(),
+                request.getWorkspace(),
+                request.getCreatedAt());
 
         SessionUploadResultDto result = new SessionUploadResultDto();
         result.setSessionId(sessionId);

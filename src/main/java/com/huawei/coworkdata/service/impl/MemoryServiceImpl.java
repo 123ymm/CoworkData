@@ -43,15 +43,25 @@ public class MemoryServiceImpl implements MemoryService {
         if (dto.isSupersedePublicationTopic() && dto.getTopic() != null && !dto.getTopic().trim().isEmpty()) {
             memoryEventMapper.supersedePublicationTopic(dto.getTopic());
         }
-        int maxSeq = memoryEventMapper.maxSeqNo(
-                dto.getSessionId(),
-                dto.getLayer(),
-                "task".equals(dto.getLayer()) ? dto.getTaskId() : null,
-                "agent".equals(dto.getLayer()) ? dto.getAgentId()
-                        : ("task".equals(dto.getLayer()) && dto.getAgentId() != null ? dto.getAgentId() : null));
-        int topicSeq = 0;
-        if (dto.getTopic() != null && !dto.getTopic().trim().isEmpty()) {
+        int seqNo;
+        if (dto.getSeqNo() != null) {
+            seqNo = dto.getSeqNo();
+        } else {
+            int maxSeq = memoryEventMapper.maxSeqNo(
+                    dto.getSessionId(),
+                    dto.getLayer(),
+                    "task".equals(dto.getLayer()) ? dto.getTaskId() : null,
+                    "agent".equals(dto.getLayer()) ? dto.getAgentId()
+                            : ("task".equals(dto.getLayer()) && dto.getAgentId() != null ? dto.getAgentId() : null));
+            seqNo = maxSeq + 1;
+        }
+        int topicSeq;
+        if (dto.getTopicSeqNo() != null) {
+            topicSeq = dto.getTopicSeqNo();
+        } else if (dto.getTopic() != null && !dto.getTopic().trim().isEmpty()) {
             topicSeq = memoryEventMapper.maxTopicSeqNo(dto.getTopic()) + 1;
+        } else {
+            topicSeq = 0;
         }
         MemoryEventEntity entity = new MemoryEventEntity();
         entity.setId(eventId);
@@ -63,9 +73,9 @@ public class MemoryServiceImpl implements MemoryService {
         entity.setRole(dto.getRole());
         entity.setTopic(dto.getTopic());
         entity.setContent(dto.getContent() != null ? dto.getContent() : "");
-        entity.setSeqNo(maxSeq + 1);
+        entity.setSeqNo(seqNo);
         entity.setTopicSeqNo(topicSeq);
-        entity.setIsSuperseded(false);
+        entity.setIsSuperseded(Boolean.TRUE.equals(dto.getIsSuperseded()));
         entity.setMetadataJson(JsonUtils.toJson(dto.getMetadata() != null ? dto.getMetadata() : Collections.emptyMap()));
         entity.setTimestamp(dto.getTimestamp() != null ? dto.getTimestamp() : OffsetDateTime.now());
         memoryEventMapper.insert(entity);
@@ -146,7 +156,8 @@ public class MemoryServiceImpl implements MemoryService {
 
     @Override
     @Transactional
-    public String subscribe(String sessionId, String taskId, String topic, String intent) {
+    public String subscribe(String sessionId, String taskId, String topic, String intent,
+                            String id, Integer cursor, OffsetDateTime createdAt) {
         String tid = taskId != null ? taskId : "";
         MemorySubscriptionEntity existing = subscriptionMapper.selectOne(
                 new LambdaQueryWrapper<MemorySubscriptionEntity>()
@@ -154,17 +165,37 @@ public class MemoryServiceImpl implements MemoryService {
                         .eq(MemorySubscriptionEntity::getTaskId, tid)
                         .eq(MemorySubscriptionEntity::getTopic, topic));
         if (existing != null) {
+            boolean dirty = false;
+            if (cursor != null && !cursor.equals(existing.getCursor())) {
+                existing.setCursor(cursor);
+                dirty = true;
+            }
+            if (intent != null && !intent.equals(existing.getIntent())) {
+                existing.setIntent(intent);
+                dirty = true;
+            }
+            if (dirty) {
+                subscriptionMapper.updateById(existing);
+            }
             return existing.getId();
         }
-        String subId = "sub_" + UUID.randomUUID().toString().replace("-", "").substring(0, 16);
+        if (id != null && !id.trim().isEmpty()) {
+            MemorySubscriptionEntity byId = subscriptionMapper.selectById(id.trim());
+            if (byId != null) {
+                return byId.getId();
+            }
+        }
+        String subId = (id != null && !id.trim().isEmpty())
+                ? id.trim()
+                : "sub_" + UUID.randomUUID().toString().replace("-", "").substring(0, 16);
         MemorySubscriptionEntity entity = new MemorySubscriptionEntity();
         entity.setId(subId);
         entity.setSessionId(sessionId);
         entity.setTaskId(tid);
         entity.setTopic(topic);
-        entity.setCursor(0);
+        entity.setCursor(cursor != null ? cursor : 0);
         entity.setIntent(intent);
-        entity.setCreatedAt(OffsetDateTime.now());
+        entity.setCreatedAt(createdAt != null ? createdAt : OffsetDateTime.now());
         subscriptionMapper.insert(entity);
         return subId;
     }

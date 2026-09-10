@@ -22,7 +22,8 @@ public interface MemoryService {
 
     Map<String, Object> recallTopic(String topic, int since);
 
-    String subscribe(String sessionId, String taskId, String topic, String intent);
+    String subscribe(String sessionId, String taskId, String topic, String intent,
+                     String id, Integer cursor, java.time.OffsetDateTime createdAt);
 
     List<Map<String, Object>> listSubscriptions(String sessionId, String taskId);
 }
