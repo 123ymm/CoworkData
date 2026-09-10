@@ -151,7 +151,7 @@ CREATE TABLE IF NOT EXISTS agent_templates (
 
 CREATE INDEX IF NOT EXISTS ix_agent_templates_name ON agent_templates (name);
 
--- user_profile.user_id = surrogate_id（JWT sub）；username = 工号（W3 uid）
+-- user_profile.user_id = W3 工号；username = 展示姓名（张三/李四）
 CREATE TABLE IF NOT EXISTS user_profile (
     user_id   VARCHAR(128) PRIMARY KEY,
     username  VARCHAR(256) NOT NULL DEFAULT ''

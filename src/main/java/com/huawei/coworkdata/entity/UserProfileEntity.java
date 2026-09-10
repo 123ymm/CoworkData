@@ -12,10 +12,10 @@ import lombok.Setter;
 @TableName("user_profile")
 public class UserProfileEntity {
 
-    /** PK = surrogate_id（JWT sub） */
+    /** PK = W3 工号 */
     @TableId(type = IdType.INPUT)
     private String userId;
-    /** W3 工号 */
+    /** 展示姓名（张三/李四）；可空串 */
     private String username;
 
     public void setUsername(String username) {

@@ -75,6 +75,7 @@ public class DbInitServiceImpl implements DbInitService {
                 "db/migration/V5__sessions_title.sql",
                 "db/migration/V6__tasks_not_null_defaults.sql",
                 "db/migration/V7__user_id_and_surrogate_id.sql",
+                "db/migration/V8__user_profile_empno_and_display_name.sql",
         };
         java.util.List<String> applied = new java.util.ArrayList<>();
         for (String path : scripts) {

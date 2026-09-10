@@ -14,7 +14,7 @@ WHERE (surrogate_id IS NULL OR TRIM(surrogate_id) = '')
   AND user_id IS NOT NULL
   AND TRIM(user_id) <> '';
 
--- 能从 user_profile 反查时，把 sessions.user_id 改回工号
+-- 能从 user_profile 反查时：旧 profile.user_id=surrogate、username=工号
 UPDATE sessions s
 SET user_id = up.username
 FROM user_profile up

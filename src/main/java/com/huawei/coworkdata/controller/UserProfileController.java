@@ -17,7 +17,7 @@ import org.springframework.web.server.ResponseStatusException;
 import java.util.List;
 
 /**
- * 地端 OAuth 用户字典：user_id ↔ username。
+ * 地端 OAuth 用户字典：user_id=工号，username=展示姓名。
  */
 @RestController
 @RequestMapping("/api/user-profiles")
@@ -43,8 +43,9 @@ public class UserProfileController {
     @PutMapping("/{userId}")
     public void save(@PathVariable String userId, @RequestBody UserProfileDto body) {
         body.setUserId(userId);
-        if (body.getUsername() == null || body.getUsername().trim().isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "username is required");
+        // username = 展示姓名，允许空串（W3 未返回 displayName 时）
+        if (body.getUsername() == null) {
+            body.setUsername("");
         }
         userProfileService.save(body);
     }

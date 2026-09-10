@@ -442,7 +442,7 @@ curl -X POST http://localhost:8080/api/reconcile/stranded-running-sessions
 | `POST` | `/api/db/tables` | `create_tables` | 执行 `schema.sql` 建表 |
 | `POST` | `/api/db/session-factory?databaseUrl=...` | `create_session_factory` | 返回解析后的 URL 与驱动提示（Java 侧无 factory 对象） |
 | `POST` | `/api/db/init?databaseUrl=` | `init_db` | 建表 + 返回初始化信息；`databaseUrl` 可选 |
-| `POST` | `/api/db/migrate-schema` | （Java） | 幂等执行 V2–V7 DDL（补列 / DEFAULT / user_id+surrogate_id）；**不做**身份映射 |
+| `POST` | `/api/db/migrate-schema` | （Java） | 幂等执行 V2–V8 DDL（补列 / DEFAULT / 双身份 / user_profile 工号+姓名）；**不做**身份映射 |
 | `POST` | `/api/db/migrate-identity` | （Java） | 执行 V4 DDL + 工号 `user_id`→surrogate 映射（需 `substrate.base-url`） |
 | `PUT` | `/api/db/skill-reporter/sessions-store` | `set_sessions_store` | 注入 SkillReporter 用的 session 用户上下文 |
 
@@ -572,22 +572,20 @@ GET /api/events/last-activity-times
 **Controller：** `UserProfileController`  
 **前缀：** `/api/user-profiles`
 
-地端用户字典：`user_id` = **surrogate_id**（JWT `sub`），`username` = 工号（W3 uid）。与 `sessions.user_id` 无外键，仅作展示/反查。
+地端用户字典：`user_id` = **W3 工号**，`username` = **展示姓名**（张三/李四）。与 `sessions.user_id`（同为工号）对齐。
 
 | 方法 | 路径 | 作用 |
 |------|------|------|
-| `GET` | `/api/user-profiles` | 列出全部 |
+| `GET` | `/api/user-profiles` | 全量 |
 | `GET` | `/api/user-profiles/{userId}` | 单条；不存在 → **404** |
-| `PUT` | `/api/user-profiles/{userId}` | upsert；body 需含 `username` |
+| `PUT` | `/api/user-profiles/{userId}` | upsert；`username` 可为 `""` |
 | `DELETE` | `/api/user-profiles/{userId}` | 删除；不存在 → **404** |
 
-请求 / 响应示例：
-
 ```json
-{ "userId": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee", "username": "w30040833" }
+{ "userId": "w30040833", "username": "张三" }
 ```
 
-地端在会话增量上传时，若能解析到 OAuth `id`（surrogate）+ `username`（工号），会一并 upsert。
+地端在会话增量上传时，若能解析到工号，会一并 upsert（姓名取 `displayName`，没有则空串）。
 
 ---
 

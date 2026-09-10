@@ -109,10 +109,18 @@ public class IdentityMigrationServiceImpl implements IdentityMigrationService {
         }
 
         for (Map.Entry<String, String> e : mapping.entrySet()) {
-            remapUserProfile(e.getKey(), e.getValue());
+            String empNo = e.getKey();
+            String surrogate = e.getValue();
+            // 新口径：user_profile.PK=工号；sessions.user_id=工号，surrogate_id=JWT sub
+            ensureEmpNoProfile(empNo);
+            jdbcTemplate.update(
+                    "UPDATE sessions SET surrogate_id = ? "
+                            + "WHERE (user_id = ? OR surrogate_id IS NULL OR TRIM(COALESCE(surrogate_id,'')) = '') "
+                            + "AND (user_id = ? OR user_id = ?)",
+                    surrogate, empNo, empNo, surrogate);
             jdbcTemplate.update(
                     "UPDATE sessions SET user_id = ? WHERE user_id = ?",
-                    e.getValue(), e.getKey());
+                    empNo, surrogate);
         }
 
         jdbcTemplate.update(
@@ -160,25 +168,23 @@ public class IdentityMigrationServiceImpl implements IdentityMigrationService {
         populator.execute(dataSource);
     }
 
+    private void ensureEmpNoProfile(String empNo) {
+        if (empNo == null || empNo.trim().isEmpty()) {
+            return;
+        }
+        UserProfileEntity existing = userProfileMapper.selectById(empNo);
+        if (existing != null) {
+            return;
+        }
+        UserProfileEntity neu = new UserProfileEntity();
+        neu.setUserId(empNo.trim());
+        neu.setUsername("");
+        userProfileMapper.insert(neu);
+    }
+
     private void remapUserProfile(String oldId, String newId) {
-        if (oldId.equals(newId)) {
-            return;
-        }
-        UserProfileEntity old = userProfileMapper.selectById(oldId);
-        if (old == null) {
-            return;
-        }
-        UserProfileEntity existingNew = userProfileMapper.selectById(newId);
-        if (existingNew == null) {
-            UserProfileEntity neu = new UserProfileEntity();
-            neu.setUserId(newId);
-            neu.setUsername(old.getUsername());
-            userProfileMapper.insert(neu);
-        } else if (existingNew.getUsername() == null || existingNew.getUsername().isEmpty()) {
-            existingNew.setUsername(old.getUsername());
-            userProfileMapper.updateById(existingNew);
-        }
-        userProfileMapper.deleteById(oldId);
+        // 保留旧方法签名以免反射调用；新口径不再把 PK 改成 surrogate
+        ensureEmpNoProfile(oldId);
     }
 
     private String fetchLocalToken(String base, String username) throws Exception {
