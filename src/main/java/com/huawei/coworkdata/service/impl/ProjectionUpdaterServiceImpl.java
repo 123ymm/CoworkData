@@ -371,16 +371,15 @@ public class ProjectionUpdaterServiceImpl implements ProjectionUpdaterService {
         TaskEntity entity = new TaskEntity();
         entity.setId(taskId);
         entity.setSessionId(event.getSessionId());
-        entity.setStatus(stringVal(taskData.get("status")) != null ? stringVal(taskData.get("status")) : "ACTIVE");
-        entity.setTitle(stringVal(taskData.get("title")) != null ? stringVal(taskData.get("title")) : "");
-        entity.setDescription(stringVal(taskData.get("description")) != null
-                ? stringVal(taskData.get("description")) : "");
+        // NOT NULL 列禁止落 null（事件 payload 里 title 经常是 JSON null）
+        entity.setStatus(nz(stringVal(taskData.get("status")), "ACTIVE"));
+        entity.setTitle(nz(firstString(taskData, "title", "title"), ""));
+        entity.setDescription(nz(firstString(taskData, "description", "description"), ""));
         // tasks.user_prompt 可空；显式缺省保持 null（与地端 TaskModel 一致）
-        String taskPrompt = firstString(taskData, "user_prompt", "userPrompt");
-        entity.setUserPrompt(taskPrompt);
-        String assigned = stringVal(taskData.get("assigned_agent_id"));
+        entity.setUserPrompt(firstString(taskData, "user_prompt", "userPrompt"));
+        String assigned = firstString(taskData, "assigned_agent_id", "assignedAgentId");
         entity.setAssignedAgentId(assigned != null ? assigned : event.getAgentId());
-        String creator = stringVal(taskData.get("creator_agent_id"));
+        String creator = firstString(taskData, "creator_agent_id", "creatorAgentId");
         entity.setCreatorAgentId(creator != null ? creator : event.getAgentId());
         entity.setIsDaemon(isDaemon);
         entity.setOutputsJson("null");
@@ -388,18 +387,26 @@ public class ProjectionUpdaterServiceImpl implements ProjectionUpdaterService {
         taskMapper.insert(entity);
     }
 
+    /** null/空白 → defaultVal；避免 NOT NULL 列写入 null */
+    private static String nz(String value, String defaultVal) {
+        return value == null || value.trim().isEmpty() ? defaultVal : value;
+    }
+
     @Transactional
     protected void updateTask(String taskId, Map<String, Object> values) {
         LambdaUpdateWrapper<TaskEntity> wrapper = new LambdaUpdateWrapper<TaskEntity>()
                 .eq(TaskEntity::getId, taskId);
         if (values.containsKey("status")) {
-            wrapper.set(TaskEntity::getStatus, values.get("status"));
+            Object st = values.get("status");
+            wrapper.set(TaskEntity::getStatus, st != null ? String.valueOf(st) : "ACTIVE");
         }
         if (values.containsKey("title")) {
-            wrapper.set(TaskEntity::getTitle, values.get("title"));
+            Object t = values.get("title");
+            wrapper.set(TaskEntity::getTitle, t != null ? String.valueOf(t) : "");
         }
         if (values.containsKey("description")) {
-            wrapper.set(TaskEntity::getDescription, values.get("description"));
+            Object d = values.get("description");
+            wrapper.set(TaskEntity::getDescription, d != null ? String.valueOf(d) : "");
         }
         if (values.containsKey("userPrompt")) {
             wrapper.set(TaskEntity::getUserPrompt, values.get("userPrompt"));

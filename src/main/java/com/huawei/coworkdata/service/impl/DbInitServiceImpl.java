@@ -64,4 +64,29 @@ public class DbInitServiceImpl implements DbInitService {
         result.put("tablesCreated", true);
         return result;
     }
+
+    @Override
+    public Map<String, Object> migrateSchema() {
+        // continueOnError：列已存在 / DEFAULT 已设时部分语句会失败，整体仍应继续
+        String[] scripts = {
+                "db/migration/V2__sessions_upload_and_soft_delete.sql",
+                "db/migration/V3__sessions_user_prompt_default.sql",
+                "db/migration/V4__surrogate_source_cowork.sql",
+                "db/migration/V5__sessions_title.sql",
+                "db/migration/V6__tasks_not_null_defaults.sql",
+        };
+        java.util.List<String> applied = new java.util.ArrayList<>();
+        for (String path : scripts) {
+            ResourceDatabasePopulator populator = new ResourceDatabasePopulator();
+            populator.addScript(new ClassPathResource(path));
+            populator.setContinueOnError(true);
+            populator.setIgnoreFailedDrops(true);
+            populator.execute(dataSource);
+            applied.add(path);
+        }
+        Map<String, Object> result = new HashMap<>();
+        result.put("applied", applied);
+        result.put("ok", true);
+        return result;
+    }
 }

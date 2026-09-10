@@ -441,6 +441,7 @@ curl -X POST http://localhost:8080/api/reconcile/stranded-running-sessions
 | `POST` | `/api/db/tables` | `create_tables` | 执行 `schema.sql` 建表 |
 | `POST` | `/api/db/session-factory?databaseUrl=...` | `create_session_factory` | 返回解析后的 URL 与驱动提示（Java 侧无 factory 对象） |
 | `POST` | `/api/db/init?databaseUrl=` | `init_db` | 建表 + 返回初始化信息；`databaseUrl` 可选 |
+| `POST` | `/api/db/migrate-schema` | （Java） | 幂等执行 V2–V6 DDL（补列 / NOT NULL 列 DEFAULT）；**不做**身份映射 |
 | `POST` | `/api/db/migrate-identity` | （Java） | 执行 V4 DDL + 工号 `user_id`→surrogate 映射（需 `substrate.base-url`） |
 | `PUT` | `/api/db/skill-reporter/sessions-store` | `set_sessions_store` | 注入 SkillReporter 用的 session 用户上下文 |
 
@@ -452,6 +453,9 @@ curl "http://localhost:8080/api/db/resolve-url?url=postgresql://cowork:cowork123
 curl -X POST http://localhost:8080/api/db/tables
 
 curl -X POST http://localhost:8080/api/db/init
+
+# 存量库补 DDL（V2–V6，含 tasks.title DEFAULT ''）
+curl -X POST http://localhost:8080/api/db/migrate-schema
 
 curl -X PUT http://localhost:8080/api/db/skill-reporter/sessions-store \
   -H "Content-Type: application/json" \

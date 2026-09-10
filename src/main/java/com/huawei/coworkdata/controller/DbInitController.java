@@ -54,6 +54,14 @@ public class DbInitController {
     }
 
     /**
+     * 存量库幂等 DDL（V2–V6：补列 + NOT NULL 列 DEFAULT）。不做身份数据迁移。
+     */
+    @PostMapping("/migrate-schema")
+    public Map<String, Object> migrateSchema() {
+        return dbInitService.migrateSchema();
+    }
+
+    /**
      * 工号 user_id → surrogate_id（JWT sub）迁移；需配置 substrate.base-url。
      */
     @PostMapping("/migrate-identity")
