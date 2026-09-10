@@ -605,8 +605,10 @@ GET /api/events/last-activity-times
 
 ```json
 { "coworkId": "my-cowork", "name": "My Cowork" }
-{ "coworkId": "my-cowork", "llm": "[\"accountA\",\"accountB\"]" }
+{ "coworkId": "my-cowork", "llm": "[\"HIS:dfa_DeepSeek-V4-Flash\",\"nis-self:dfa_glm-52\"]" }
 ```
+
+`cowork_permission.llm` 为 JSON 文本数组，元素格式为 **`账号:模型名`**（与地端套件 `llm.allow` + `llm.define.models` 展开一致）。
 
 ---
 
