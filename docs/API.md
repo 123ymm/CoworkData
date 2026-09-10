@@ -296,9 +296,13 @@ curl -X DELETE http://localhost:8080/api/sessions/ses_abc123
 
 - `userId`：写入 `sessions.user_id`（**surrogate_id** / JWT `sub`），供按人列表查询
 - `coworkId` / `source` / `installId` / `tenantId`：写入对应列；`tenantId` 缺省且两侧齐全时服务端拼 `{userId}:{coworkId}`
+- `userPrompt` / `goal` / `llmProvider` / `llmModel`：补全 `ensureSessionForUpload` 空壳投影（仅覆盖云端空值）
+- `title`：用户手动标题；地端非空则覆盖云端（允许改名后再同步）
+- `configJson`：地端完整 `config_json`；与云端 merge（地上游同键覆盖）
 - `uploadIndex`：新水位；省略则为「旧水位 + 新写入事件数」
 - 事件按 `id` 幂等；`uploadIndex < 当前水位` → **409**
-- 会话不存在时自动创建最小投影行
+- 新写入事件的投影失败会回滚整批（含 append），水位不前进，便于地端重试重放
+- 会话不存在时自动创建最小投影行；随后 `SessionCreated` 会回填空壳上的投影字段
 
 ---
 

@@ -12,6 +12,8 @@ CREATE TABLE IF NOT EXISTS sessions (
     -- DEFAULT ''：MyBatis 省略空/null 列时仍能 INSERT，避免 not-null 炸库
     user_prompt     TEXT         NOT NULL DEFAULT '',
     status          VARCHAR(32)  NOT NULL DEFAULT 'RUNNING',
+    -- 用户手动标题；与事件投影的 goal 分离
+    title           TEXT         NOT NULL DEFAULT '',
     goal            TEXT         NOT NULL DEFAULT '',
     root_agent_id   VARCHAR(64),
     llm_provider    VARCHAR(64),

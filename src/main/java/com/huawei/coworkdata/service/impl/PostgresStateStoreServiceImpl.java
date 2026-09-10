@@ -226,6 +226,7 @@ public class PostgresStateStoreServiceImpl implements PostgresStateStoreService 
         entity.setInstallId(blankToNull(installId));
         entity.setUserPrompt("");
         entity.setStatus("RUNNING");
+        entity.setTitle("");
         entity.setGoal("");
         entity.setTokenBudget(200_000L);
         entity.setFailureCounter(0);
@@ -233,6 +234,67 @@ public class PostgresStateStoreServiceImpl implements PostgresStateStoreService 
         entity.setLastUploadIndex(0);
         entity.setCreatedAt(OffsetDateTime.now());
         sessionMapper.insert(entity);
+    }
+
+    @Override
+    @Transactional
+    public void backfillSessionProjection(String sessionId, String userPrompt, String goal,
+                                          String title, String llmProvider, String llmModel,
+                                          String configJson) {
+        SessionEntity existing = sessionMapper.selectById(sessionId);
+        if (existing == null) {
+            return;
+        }
+        SessionEntity update = new SessionEntity();
+        update.setId(sessionId);
+        boolean any = false;
+        if (!isBlank(userPrompt) && isBlank(existing.getUserPrompt())) {
+            update.setUserPrompt(userPrompt.trim());
+            any = true;
+        }
+        if (!isBlank(goal) && isBlank(existing.getGoal())) {
+            update.setGoal(goal.trim());
+            any = true;
+        }
+        // title 为用户手动命名：地端非空则覆盖（允许改名后再次同步）
+        if (!isBlank(title) && !title.trim().equals(
+                existing.getTitle() != null ? existing.getTitle() : "")) {
+            update.setTitle(title.trim());
+            any = true;
+        }
+        if (!isBlank(llmProvider) && isBlank(existing.getLlmProvider())) {
+            update.setLlmProvider(llmProvider.trim());
+            any = true;
+        }
+        if (!isBlank(llmModel) && isBlank(existing.getLlmModel())) {
+            update.setLlmModel(llmModel.trim());
+            any = true;
+        }
+        if (!isBlank(configJson)) {
+            Map<String, Object> incoming = JsonUtils.parseMap(configJson);
+            if (incoming != null && !incoming.isEmpty()) {
+                Map<String, Object> merged = new HashMap<>();
+                Map<String, Object> cur = JsonUtils.parseMap(existing.getConfigJson());
+                if (cur != null) {
+                    merged.putAll(cur);
+                }
+                // 地上游为准：同键覆盖，补全新键（reasoning_effort / template_id 等）
+                merged.putAll(incoming);
+                String mergedJson = JsonUtils.toJson(merged);
+                if (!mergedJson.equals(existing.getConfigJson() != null
+                        ? existing.getConfigJson() : "{}")) {
+                    update.setConfigJson(mergedJson);
+                    any = true;
+                }
+            }
+        }
+        if (any) {
+            sessionMapper.updateById(update);
+        }
+    }
+
+    private static boolean isBlank(String s) {
+        return s == null || s.trim().isEmpty();
     }
 
     private static String blankToNull(String s) {
@@ -259,6 +321,7 @@ public class PostgresStateStoreServiceImpl implements PostgresStateStoreService 
         dto.setInstallId(row.getInstallId());
         dto.setUserPrompt(row.getUserPrompt());
         dto.setStatus(row.getStatus());
+        dto.setTitle(row.getTitle() != null ? row.getTitle() : "");
         dto.setGoal(row.getGoal() != null ? row.getGoal() : "");
         dto.setRootAgentId(row.getRootAgentId());
         dto.setLlmProvider(row.getLlmProvider());

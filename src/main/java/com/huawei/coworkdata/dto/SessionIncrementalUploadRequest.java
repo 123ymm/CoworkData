@@ -29,6 +29,15 @@ public class SessionIncrementalUploadRequest {
     /** "{userId}:{coworkId}"；缺省由服务端在有两侧时拼接 */
     private String tenantId;
 
+    /** 地端 sessions 投影字段（补全 ensureSession 空壳） */
+    private String userPrompt;
+    private String goal;
+    private String title;
+    private String llmProvider;
+    private String llmModel;
+    /** 地端完整 config_json 文本（如 {"template_id":"...","reasoning_effort":"..."}） */
+    private String configJson;
+
     /** 本次上传后的新水位；若为空，则用「当前水位 + 成功写入事件数」 */
     private Integer uploadIndex;
 

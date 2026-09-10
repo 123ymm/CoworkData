@@ -66,6 +66,14 @@ public class ProjectionUpdaterServiceImpl implements ProjectionUpdaterService {
         }
     }
 
+    @Override
+    public void onEventOrThrow(EventDto event) {
+        if (event.getType() != null && TRANSIENT_EVENT_TYPES.contains(event.getType())) {
+            return;
+        }
+        handle(event);
+    }
+
     private void handle(EventDto event) {
         String type = event.getType();
         Map<String, Object> payload = event.getPayload() != null ? event.getPayload() : Collections.emptyMap();
@@ -219,12 +227,79 @@ public class ProjectionUpdaterServiceImpl implements ProjectionUpdaterService {
             entity.setLastUploadIndex(0);
             entity.setCreatedAt(event.getTimestamp() != null ? event.getTimestamp() : OffsetDateTime.now());
             sessionMapper.insert(entity);
-        } else if (existing.getRootAgentId() == null) {
-            SessionEntity update = new SessionEntity();
-            update.setId(event.getSessionId());
-            update.setRootAgentId(stringVal(payload.get("root_agent_id")));
+            return;
+        }
+
+        // 增量上传会先 ensureSessionForUpload 插空壳（user_prompt/goal=""、llm 空），
+        // 再投递 SessionCreated。若这里只补 root_agent_id，投影字段会永远留空。
+        SessionEntity update = new SessionEntity();
+        update.setId(event.getSessionId());
+        boolean dirty = false;
+        boolean wasStub = isBlank(existing.getUserPrompt());
+        if (isBlank(existing.getRootAgentId())) {
+            String root = stringVal(payload.get("root_agent_id"));
+            if (!isBlank(root)) {
+                update.setRootAgentId(root);
+                dirty = true;
+            }
+        }
+        if (isBlank(existing.getUserPrompt())) {
+            String prompt = payloadString(payload, "user_prompt", "userPrompt", null);
+            if (!isBlank(prompt)) {
+                update.setUserPrompt(prompt);
+                dirty = true;
+            }
+        }
+        if (isBlank(existing.getLlmProvider())) {
+            String provider = stringVal(payload.get("llm_account"));
+            if (!isBlank(provider)) {
+                update.setLlmProvider(provider);
+                dirty = true;
+            }
+        }
+        if (isBlank(existing.getLlmModel())) {
+            String model = stringVal(payload.get("llm_model"));
+            if (!isBlank(model)) {
+                update.setLlmModel(model);
+                dirty = true;
+            }
+        }
+        // config.template_id：空壳为 "{}" 或缺 template 时补上
+        String templateId = stringVal(payload.get("template_id"));
+        if (!isBlank(templateId)) {
+            Map<String, Object> parsed = JsonUtils.parseMap(existing.getConfigJson());
+            Map<String, Object> config = new HashMap<>();
+            if (parsed != null) {
+                config.putAll(parsed);
+            }
+            Object cur = config.get("template_id");
+            if (cur == null || String.valueOf(cur).trim().isEmpty()) {
+                config.put("template_id", templateId);
+                update.setConfigJson(JsonUtils.toJson(config));
+                dirty = true;
+            }
+        }
+        Object budget = payload.get("token_budget");
+        if (budget instanceof Number
+                && (existing.getTokenBudget() == null || existing.getTokenBudget() == 200_000L)) {
+            long b = ((Number) budget).longValue();
+            if (b != 200_000L) {
+                update.setTokenBudget(b);
+                dirty = true;
+            }
+        }
+        // ensureSession 空壳的 created_at 是上传时刻；用 SessionCreated 事件时间纠正
+        if (event.getTimestamp() != null && (wasStub || dirty)) {
+            update.setCreatedAt(event.getTimestamp());
+            dirty = true;
+        }
+        if (dirty) {
             sessionMapper.updateById(update);
         }
+    }
+
+    private static boolean isBlank(String s) {
+        return s == null || s.trim().isEmpty();
     }
 
     @Transactional

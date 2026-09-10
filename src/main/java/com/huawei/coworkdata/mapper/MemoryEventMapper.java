@@ -12,10 +12,16 @@ import java.util.List;
 @Mapper
 public interface MemoryEventMapper extends BaseMapper<MemoryEventEntity> {
 
-    @Select("SELECT COALESCE(MAX(seq_no), 0) FROM memory_events "
+    /**
+     * 勿用 {@code #{taskId} IS NULL}：openGauss/PG 在 JDBC null 无类型时会报
+     * "could not determine data type of parameter"。null 时省略条件（与原 OR 语义一致）。
+     */
+    @Select("<script>"
+            + "SELECT COALESCE(MAX(seq_no), 0) FROM memory_events "
             + "WHERE session_id = #{sessionId} AND layer = #{layer} "
-            + "  AND (#{taskId} IS NULL OR task_id = #{taskId}) "
-            + "  AND (#{agentId} IS NULL OR agent_id = #{agentId})")
+            + "<if test='taskId != null'> AND task_id = #{taskId}</if> "
+            + "<if test='agentId != null'> AND agent_id = #{agentId}</if> "
+            + "</script>")
     int maxSeqNo(
             @Param("sessionId") String sessionId,
             @Param("layer") String layer,

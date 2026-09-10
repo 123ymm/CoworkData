@@ -9,7 +9,6 @@ import com.huawei.coworkdata.service.PostgresEventStoreService;
 import com.huawei.coworkdata.service.PostgresStateStoreService;
 import com.huawei.coworkdata.service.ProjectionUpdaterService;
 import com.huawei.coworkdata.service.SessionSyncService;
-import com.huawei.coworkdata.service.SnapshotWriterService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -26,7 +25,6 @@ public class SessionSyncServiceImpl implements SessionSyncService {
     private final PostgresStateStoreService stateStore;
     private final PostgresEventStoreService eventStore;
     private final ProjectionUpdaterService projectionUpdater;
-    private final SnapshotWriterService snapshotWriter;
 
     @Override
     public UploadWatermarkDto getUploadWatermark(String sessionId) {
@@ -74,12 +72,14 @@ public class SessionSyncServiceImpl implements SessionSyncService {
                         HttpStatus.BAD_REQUEST,
                         "event.sessionId mismatch: " + event.getSessionId());
             }
-            // 投影/快照走流水线；事件写入用幂等 append，避免重复上传冲突
+            // 投影走流水线；事件写入用幂等 append，避免重复上传冲突。
+            // ⚠ 不在此调用 snapshotWriter：地端增量上传会另走 POST …/snapshots 传真实
+            // state_blob；这里再写残缺 stub 会与真快照混排并被 prune 冲掉。
             boolean inserted = eventStore.appendIfAbsent(event);
             if (inserted) {
                 accepted++;
-                projectionUpdater.onEvent(event);
-                snapshotWriter.onEvent(event);
+                // 投影失败必须抛出 → 与 append 同事务回滚，水位不前进，地端可重传重放
+                projectionUpdater.onEventOrThrow(event);
             } else {
                 skipped++;
             }
@@ -108,6 +108,14 @@ public class SessionSyncServiceImpl implements SessionSyncService {
                 request.getSource(),
                 request.getInstallId(),
                 request.getCoworkId());
+        stateStore.backfillSessionProjection(
+                sessionId,
+                request.getUserPrompt(),
+                request.getGoal(),
+                request.getTitle(),
+                request.getLlmProvider(),
+                request.getLlmModel(),
+                request.getConfigJson());
 
         SessionUploadResultDto result = new SessionUploadResultDto();
         result.setSessionId(sessionId);

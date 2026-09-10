@@ -42,8 +42,11 @@ public class CoworkServiceImpl implements CoworkService {
     public void save(CoworkDto dto) {
         CoworkEntity existing = coworkMapper.selectById(dto.getCoworkId());
         if (existing != null) {
-            existing.setName(dto.getName() != null ? dto.getName() : "");
-            coworkMapper.updateById(existing);
+            // 空 name 不覆盖已有展示名（地端查不到 suite 时会传 ""）
+            if (dto.getName() != null && !dto.getName().trim().isEmpty()) {
+                existing.setName(dto.getName());
+                coworkMapper.updateById(existing);
+            }
             return;
         }
         CoworkEntity entity = new CoworkEntity();

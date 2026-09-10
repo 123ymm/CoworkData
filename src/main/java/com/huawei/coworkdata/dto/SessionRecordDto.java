@@ -19,6 +19,8 @@ public class SessionRecordDto {
     private String installId;
     private String userPrompt;
     private String status;
+    /** 用户手动标题；与 goal 分离 */
+    private String title;
     private String goal;
     private String rootAgentId;
     private String llmProvider;

@@ -43,5 +43,10 @@ public interface PostgresStateStoreService {
     void updateSessionIdentity(String sessionId, String userId, String tenantId,
                                String source, String installId, String coworkId);
 
+    /** 用上传请求里的投影字段补空壳 / 合并 config（title 非空覆盖；config 以地上游为准合并） */
+    void backfillSessionProjection(String sessionId, String userPrompt, String goal,
+                                   String title, String llmProvider, String llmModel,
+                                   String configJson);
+
     void deleteSession(String sessionId);
 }

@@ -64,6 +64,7 @@ public class SessionExportServiceImpl implements SessionExportService {
         row.put("install_id", s.getInstallId());
         row.put("user_prompt", s.getUserPrompt());
         row.put("status", s.getStatus());
+        row.put("title", s.getTitle());
         row.put("goal", s.getGoal());
         row.put("root_agent_id", s.getRootAgentId());
         row.put("llm_provider", s.getLlmProvider());
