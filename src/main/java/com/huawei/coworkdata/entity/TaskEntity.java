@@ -5,11 +5,14 @@ import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
-import lombok.Data;
+import com.huawei.coworkdata.util.Strings;
+import lombok.Getter;
+import lombok.Setter;
 
 import java.time.OffsetDateTime;
 
-@Data
+@Getter
+@Setter
 @TableName("tasks")
 public class TaskEntity {
 
@@ -18,7 +21,6 @@ public class TaskEntity {
     private String sessionId;
     @TableField(insertStrategy = FieldStrategy.ALWAYS, updateStrategy = FieldStrategy.NOT_NULL)
     private String status;
-    /** NOT NULL：INSERT 必须带值（缺省用 ""，与地端一致） */
     @TableField(insertStrategy = FieldStrategy.ALWAYS, updateStrategy = FieldStrategy.NOT_NULL)
     private String title;
     @TableField(insertStrategy = FieldStrategy.ALWAYS, updateStrategy = FieldStrategy.NOT_NULL)
@@ -33,4 +35,24 @@ public class TaskEntity {
     private String error;
     private OffsetDateTime createdAt;
     private OffsetDateTime updatedAt;
+
+    public void setStatus(String status) {
+        this.status = Strings.nz(status, "PENDING");
+    }
+
+    public void setTitle(String title) {
+        this.title = Strings.nz(title);
+    }
+
+    public void setDescription(String description) {
+        this.description = Strings.nz(description);
+    }
+
+    public void setOutputsJson(String outputsJson) {
+        this.outputsJson = Strings.nz(outputsJson, "null");
+    }
+
+    public void setIsDaemon(Boolean isDaemon) {
+        this.isDaemon = isDaemon != null ? isDaemon : Boolean.FALSE;
+    }
 }

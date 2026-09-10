@@ -14,8 +14,11 @@ import java.util.List;
 @Data
 public class SessionIncrementalUploadRequest {
 
-    /** 会话所属用户（surrogate_id / JWT sub）；首次上传建议带上，写入 sessions.user_id */
+    /** W3 工号 → sessions.user_id */
     private String userId;
+
+    /** substrate JWT sub → sessions.surrogate_id */
+    private String surrogateId;
 
     /** cowork 套件 id */
     private String coworkId;
@@ -26,7 +29,7 @@ public class SessionIncrementalUploadRequest {
     /** Electron 安装 UUID */
     private String installId;
 
-    /** "{userId}:{coworkId}"；缺省由服务端在有两侧时拼接 */
+    /** "{surrogateId}:{coworkId}"；缺省由服务端在有两侧时拼接 */
     private String tenantId;
 
     /** 地端 sessions 投影字段（补全 ensureSession 空壳） */

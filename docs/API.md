@@ -294,8 +294,9 @@ curl -X DELETE http://localhost:8080/api/sessions/ses_abc123
 
 增量上传说明：
 
-- `userId`：写入 `sessions.user_id`（**surrogate_id** / JWT `sub`），供按人列表查询
-- `coworkId` / `source` / `installId` / `tenantId`：写入对应列；`tenantId` 缺省且两侧齐全时服务端拼 `{userId}:{coworkId}`
+- `userId`：写入 `sessions.user_id`（**W3 工号**）
+- `surrogateId`：写入 `sessions.surrogate_id`（**JWT sub**）
+- `coworkId` / `source` / `installId` / `tenantId`：写入对应列；`tenantId` 缺省且 surrogate+cowork 齐全时服务端拼 `{surrogateId}:{coworkId}`
 - `userPrompt` / `goal` / `llmProvider` / `llmModel`：补全 `ensureSessionForUpload` 空壳投影（仅覆盖云端空值）
 - `title`：用户手动标题；地端非空则覆盖云端（允许改名后再同步）
 - `configJson`：地端完整 `config_json`；与云端 merge（地上游同键覆盖）
@@ -441,7 +442,7 @@ curl -X POST http://localhost:8080/api/reconcile/stranded-running-sessions
 | `POST` | `/api/db/tables` | `create_tables` | 执行 `schema.sql` 建表 |
 | `POST` | `/api/db/session-factory?databaseUrl=...` | `create_session_factory` | 返回解析后的 URL 与驱动提示（Java 侧无 factory 对象） |
 | `POST` | `/api/db/init?databaseUrl=` | `init_db` | 建表 + 返回初始化信息；`databaseUrl` 可选 |
-| `POST` | `/api/db/migrate-schema` | （Java） | 幂等执行 V2–V6 DDL（补列 / NOT NULL 列 DEFAULT）；**不做**身份映射 |
+| `POST` | `/api/db/migrate-schema` | （Java） | 幂等执行 V2–V7 DDL（补列 / DEFAULT / user_id+surrogate_id）；**不做**身份映射 |
 | `POST` | `/api/db/migrate-identity` | （Java） | 执行 V4 DDL + 工号 `user_id`→surrogate 映射（需 `substrate.base-url`） |
 | `PUT` | `/api/db/skill-reporter/sessions-store` | `set_sessions_store` | 注入 SkillReporter 用的 session 用户上下文 |
 

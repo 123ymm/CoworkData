@@ -1,15 +1,17 @@
 CREATE TABLE IF NOT EXISTS sessions (
     id              VARCHAR(64) PRIMARY KEY,
-    -- tenant_id = "{user_id}:{cowork_id}"（surrogate_id:cowork_id）；缺一侧时可为 default
+    -- tenant_id = "{surrogate_id}:{cowork_id}"；缺一侧时可为 default
     tenant_id       VARCHAR(256) NOT NULL DEFAULT 'default',
-    -- user_id = substrate JWT sub（surrogate_id）；username 在 user_profile
+    -- user_id = W3 工号（username）
     user_id         VARCHAR(128),
+    -- surrogate_id = substrate JWT sub
+    surrogate_id    VARCHAR(128),
     cowork_id       VARCHAR(128),
     -- local = 地端上传；cloud = 云端原生
     source          VARCHAR(16)  NOT NULL DEFAULT 'local',
     -- Electron 安装 UUID（主机名/安装 id）
     install_id      VARCHAR(64),
-    -- DEFAULT ''：MyBatis 省略空/null 列时仍能 INSERT，避免 not-null 炸库
+    -- DEFAULT ''：省略列时仍能 INSERT；显式 null 须靠 Entity setter 收成 ''
     user_prompt     TEXT         NOT NULL DEFAULT '',
     status          VARCHAR(32)  NOT NULL DEFAULT 'RUNNING',
     -- 用户手动标题；与事件投影的 goal 分离
@@ -30,6 +32,7 @@ CREATE TABLE IF NOT EXISTS sessions (
 
 CREATE INDEX IF NOT EXISTS ix_sessions_tenant_id ON sessions (tenant_id);
 CREATE INDEX IF NOT EXISTS ix_sessions_user_id ON sessions (user_id);
+CREATE INDEX IF NOT EXISTS ix_sessions_surrogate_id ON sessions (surrogate_id);
 CREATE INDEX IF NOT EXISTS ix_sessions_cowork_id ON sessions (cowork_id);
 CREATE INDEX IF NOT EXISTS ix_sessions_source ON sessions (source);
 CREATE INDEX IF NOT EXISTS ix_sessions_install_id ON sessions (install_id);
@@ -62,8 +65,8 @@ CREATE TABLE IF NOT EXISTS events (
     task_id       VARCHAR(64),
     agent_id      VARCHAR(64),
     tenant_id     VARCHAR(256) NOT NULL DEFAULT 'default',
-    type          VARCHAR(128) NOT NULL,
-    sequence      INTEGER      NOT NULL,
+    type          VARCHAR(128) NOT NULL DEFAULT '',
+    sequence      INTEGER      NOT NULL DEFAULT 0,
     payload_json  TEXT         NOT NULL DEFAULT '{}',
     metadata_json TEXT         NOT NULL DEFAULT '{}',
     causation_id  VARCHAR(64),
@@ -78,8 +81,8 @@ CREATE INDEX IF NOT EXISTS ix_events_session_type ON events (session_id, type);
 
 CREATE TABLE IF NOT EXISTS session_sse_events (
     id         SERIAL PRIMARY KEY,
-    session_id VARCHAR(64) NOT NULL,
-    event_json TEXT        NOT NULL
+    session_id VARCHAR(64) NOT NULL DEFAULT '',
+    event_json TEXT        NOT NULL DEFAULT ''
 );
 
 CREATE INDEX IF NOT EXISTS ix_session_sse_events_session_id ON session_sse_events (session_id);
@@ -87,9 +90,9 @@ CREATE INDEX IF NOT EXISTS ix_session_sse_events_session_id ON session_sse_event
 CREATE TABLE IF NOT EXISTS snapshots (
     id                    VARCHAR(64) PRIMARY KEY,
     session_id            VARCHAR(64) NOT NULL REFERENCES sessions (id),
-    last_event_id         VARCHAR(64) NOT NULL,
-    last_event_sequence   INTEGER     NOT NULL,
-    state_blob_json       TEXT        NOT NULL,
+    last_event_id         VARCHAR(64) NOT NULL DEFAULT '',
+    last_event_sequence   INTEGER     NOT NULL DEFAULT 0,
+    state_blob_json       TEXT        NOT NULL DEFAULT '{}',
     snapshot_reason       VARCHAR(128) NOT NULL DEFAULT '',
     created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -104,11 +107,11 @@ CREATE TABLE IF NOT EXISTS memory_events (
     task_id         VARCHAR(64),
     agent_id        VARCHAR(64),
     layer           VARCHAR(16)  NOT NULL DEFAULT 'task',
-    type            VARCHAR(64)  NOT NULL,
+    type            VARCHAR(64)  NOT NULL DEFAULT '',
     role            VARCHAR(32),
     topic           VARCHAR(256),
-    content         TEXT         NOT NULL,
-    seq_no          INTEGER      NOT NULL,
+    content         TEXT         NOT NULL DEFAULT '',
+    seq_no          INTEGER      NOT NULL DEFAULT 0,
     topic_seq_no    INTEGER      NOT NULL DEFAULT 0,
     is_superseded   BOOLEAN      NOT NULL DEFAULT FALSE,
     metadata_json   TEXT         NOT NULL DEFAULT '{}',
@@ -126,9 +129,9 @@ CREATE TABLE IF NOT EXISTS memory_subscriptions (
     id          VARCHAR(64) PRIMARY KEY,
     session_id  VARCHAR(64) NOT NULL,
     task_id     VARCHAR(64)  NOT NULL DEFAULT '',
-    topic       VARCHAR(256) NOT NULL,
+    topic       VARCHAR(256) NOT NULL DEFAULT '',
     cursor      INTEGER      NOT NULL DEFAULT 0,
-    intent      VARCHAR(64)  NOT NULL,
+    intent      VARCHAR(64)  NOT NULL DEFAULT '',
     created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
 
@@ -138,20 +141,20 @@ CREATE UNIQUE INDEX IF NOT EXISTS ix_subscriptions_session_task_topic
 
 CREATE TABLE IF NOT EXISTS agent_templates (
     id            VARCHAR(128) PRIMARY KEY,
-    name          VARCHAR(256) NOT NULL,
-    version       VARCHAR(32)  NOT NULL,
+    name          VARCHAR(256) NOT NULL DEFAULT '',
+    version       VARCHAR(32)  NOT NULL DEFAULT '',
     description   TEXT         NOT NULL DEFAULT '',
-    template_dir  TEXT         NOT NULL,
+    template_dir  TEXT         NOT NULL DEFAULT '',
     created_at    TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
     updated_at    TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX IF NOT EXISTS ix_agent_templates_name ON agent_templates (name);
 
--- user_id = substrate surrogate_id（JWT sub）；username = 工号（W3 uid）
+-- user_profile.user_id = surrogate_id（JWT sub）；username = 工号（W3 uid）
 CREATE TABLE IF NOT EXISTS user_profile (
     user_id   VARCHAR(128) PRIMARY KEY,
-    username  VARCHAR(256) NOT NULL
+    username  VARCHAR(256) NOT NULL DEFAULT ''
 );
 
 CREATE INDEX IF NOT EXISTS ix_user_profile_username ON user_profile (username);

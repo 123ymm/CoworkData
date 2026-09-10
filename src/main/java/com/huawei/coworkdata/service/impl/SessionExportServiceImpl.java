@@ -59,6 +59,7 @@ public class SessionExportServiceImpl implements SessionExportService {
         row.put("id", s.getId());
         row.put("tenant_id", s.getTenantId());
         row.put("user_id", s.getUserId());
+        row.put("surrogate_id", s.getSurrogateId());
         row.put("cowork_id", s.getCoworkId());
         row.put("source", s.getSource());
         row.put("install_id", s.getInstallId());

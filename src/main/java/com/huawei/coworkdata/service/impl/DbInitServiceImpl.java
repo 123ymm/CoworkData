@@ -74,6 +74,7 @@ public class DbInitServiceImpl implements DbInitService {
                 "db/migration/V4__surrogate_source_cowork.sql",
                 "db/migration/V5__sessions_title.sql",
                 "db/migration/V6__tasks_not_null_defaults.sql",
+                "db/migration/V7__user_id_and_surrogate_id.sql",
         };
         java.util.List<String> applied = new java.util.ArrayList<>();
         for (String path : scripts) {

@@ -10,8 +10,10 @@ public class SessionRecordDto {
 
     private String id;
     private String tenantId;
-    /** substrate JWT sub（surrogate_id） */
+    /** W3 工号 */
     private String userId;
+    /** substrate JWT sub */
+    private String surrogateId;
     private String coworkId;
     /** local | cloud */
     private String source;

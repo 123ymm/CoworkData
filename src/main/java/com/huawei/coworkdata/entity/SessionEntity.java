@@ -6,30 +6,33 @@ import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableLogic;
 import com.baomidou.mybatisplus.annotation.TableName;
-import lombok.Data;
+import com.huawei.coworkdata.util.Strings;
+import lombok.Getter;
+import lombok.Setter;
 
 import java.time.OffsetDateTime;
 
-@Data
+@Getter
+@Setter
 @TableName("sessions")
 public class SessionEntity {
 
     @TableId(type = IdType.INPUT)
     private String id;
-    /** "{user_id}:{cowork_id}"；缺一侧时可为 default */
+    /** "{surrogate_id}:{cowork_id}"；缺一侧时可为 default */
     private String tenantId;
-    /** substrate JWT sub（surrogate_id） */
+    /** W3 工号（username） */
     private String userId;
+    /** substrate JWT sub */
+    private String surrogateId;
     private String coworkId;
     /** local | cloud */
     private String source;
     /** Electron 安装 UUID */
     private String installId;
-    /** NOT NULL 列：INSERT 必须带值，避免策略省略后撞 DEFAULT 未部署的存量库 */
     @TableField(insertStrategy = FieldStrategy.ALWAYS, updateStrategy = FieldStrategy.NOT_NULL)
     private String userPrompt;
     private String status;
-    /** 用户手动标题；与 goal 分离 */
     private String title;
     private String goal;
     private String rootAgentId;
@@ -39,11 +42,37 @@ public class SessionEntity {
     private Integer failureCounter;
     private String configJson;
     private String workspace;
-    /** 地端 cowork 上次上传到的进度索引 */
     private Integer lastUploadIndex;
-    /** 软删时间；null 表示未删除 */
     @TableLogic(value = "null", delval = "now()")
     private OffsetDateTime deleteAt;
     private OffsetDateTime createdAt;
     private OffsetDateTime updatedAt;
+
+    public void setTenantId(String tenantId) {
+        this.tenantId = Strings.nz(tenantId, "default");
+    }
+
+    public void setSource(String source) {
+        this.source = Strings.nz(source, "local");
+    }
+
+    public void setUserPrompt(String userPrompt) {
+        this.userPrompt = Strings.nz(userPrompt);
+    }
+
+    public void setStatus(String status) {
+        this.status = Strings.nz(status, "RUNNING");
+    }
+
+    public void setTitle(String title) {
+        this.title = Strings.nz(title);
+    }
+
+    public void setGoal(String goal) {
+        this.goal = Strings.nz(goal);
+    }
+
+    public void setConfigJson(String configJson) {
+        this.configJson = Strings.nz(configJson, "{}");
+    }
 }

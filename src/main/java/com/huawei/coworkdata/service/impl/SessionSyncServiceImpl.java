@@ -50,6 +50,7 @@ public class SessionSyncServiceImpl implements SessionSyncService {
         stateStore.ensureSessionForUpload(
                 sessionId,
                 request.getUserId(),
+                request.getSurrogateId(),
                 request.getTenantId(),
                 request.getSource(),
                 request.getInstallId(),
@@ -72,13 +73,9 @@ public class SessionSyncServiceImpl implements SessionSyncService {
                         HttpStatus.BAD_REQUEST,
                         "event.sessionId mismatch: " + event.getSessionId());
             }
-            // 投影走流水线；事件写入用幂等 append，避免重复上传冲突。
-            // ⚠ 不在此调用 snapshotWriter：地端增量上传会另走 POST …/snapshots 传真实
-            // state_blob；这里再写残缺 stub 会与真快照混排并被 prune 冲掉。
             boolean inserted = eventStore.appendIfAbsent(event);
             if (inserted) {
                 accepted++;
-                // 投影失败必须抛出 → 与 append 同事务回滚，水位不前进，地端可重传重放
                 projectionUpdater.onEventOrThrow(event);
             } else {
                 skipped++;
@@ -96,14 +93,17 @@ public class SessionSyncServiceImpl implements SessionSyncService {
         }
         stateStore.updateLastUploadIndex(sessionId, newIndex);
         String tenantId = request.getTenantId();
+        String surrogate = request.getSurrogateId();
+        // tenant = "{surrogate_id}:{cowork_id}"
         if ((tenantId == null || tenantId.trim().isEmpty())
-                && request.getUserId() != null && !request.getUserId().trim().isEmpty()
+                && surrogate != null && !surrogate.trim().isEmpty()
                 && request.getCoworkId() != null && !request.getCoworkId().trim().isEmpty()) {
-            tenantId = request.getUserId().trim() + ":" + request.getCoworkId().trim();
+            tenantId = surrogate.trim() + ":" + request.getCoworkId().trim();
         }
         stateStore.updateSessionIdentity(
                 sessionId,
                 request.getUserId(),
+                request.getSurrogateId(),
                 tenantId,
                 request.getSource(),
                 request.getInstallId(),

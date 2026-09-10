@@ -43,9 +43,12 @@ public class PostgresStateStoreServiceImpl implements PostgresStateStoreService 
 
     @Override
     public List<SessionRecordDto> listSessionsByUserId(String userId) {
+        // 过渡：工号或 surrogate 都能查到
         List<SessionEntity> rows = sessionMapper.selectList(
                 new LambdaQueryWrapper<SessionEntity>()
-                        .eq(SessionEntity::getUserId, userId)
+                        .and(w -> w.eq(SessionEntity::getUserId, userId)
+                                .or()
+                                .eq(SessionEntity::getSurrogateId, userId))
                         .orderByDesc(SessionEntity::getCreatedAt));
         return rows.stream().map(this::toRecord).collect(Collectors.toList());
     }
@@ -159,13 +162,17 @@ public class PostgresStateStoreServiceImpl implements PostgresStateStoreService 
 
     @Override
     @Transactional
-    public void updateSessionIdentity(String sessionId, String userId, String tenantId,
+    public void updateSessionIdentity(String sessionId, String userId, String surrogateId, String tenantId,
                                       String source, String installId, String coworkId) {
         SessionEntity update = new SessionEntity();
         update.setId(sessionId);
         boolean any = false;
         if (userId != null && !userId.trim().isEmpty()) {
             update.setUserId(userId.trim());
+            any = true;
+        }
+        if (surrogateId != null && !surrogateId.trim().isEmpty()) {
+            update.setSurrogateId(surrogateId.trim());
             any = true;
         }
         if (tenantId != null && !tenantId.trim().isEmpty()) {
@@ -191,12 +198,13 @@ public class PostgresStateStoreServiceImpl implements PostgresStateStoreService 
 
     @Override
     @Transactional
-    public void ensureSessionForUpload(String sessionId, String userId,
+    public void ensureSessionForUpload(String sessionId, String userId, String surrogateId,
                                        String tenantId, String source, String installId, String coworkId) {
         SessionEntity existing = sessionMapper.selectById(sessionId);
         if (existing != null) {
             updateSessionIdentity(sessionId,
                     (existing.getUserId() == null || existing.getUserId().trim().isEmpty()) ? userId : null,
+                    (existing.getSurrogateId() == null || existing.getSurrogateId().trim().isEmpty()) ? surrogateId : null,
                     (existing.getTenantId() == null || existing.getTenantId().trim().isEmpty()
                             || "default".equals(existing.getTenantId())) ? tenantId : null,
                     (existing.getSource() == null || existing.getSource().trim().isEmpty()) ? source : null,
@@ -206,9 +214,11 @@ public class PostgresStateStoreServiceImpl implements PostgresStateStoreService 
         }
         String resolvedCowork = blankToNull(coworkId);
         String resolvedUser = blankToNull(userId);
+        String resolvedSurrogate = blankToNull(surrogateId);
         String resolvedTenant = blankToNull(tenantId);
-        if (resolvedTenant == null && resolvedUser != null && resolvedCowork != null) {
-            resolvedTenant = resolvedUser + ":" + resolvedCowork;
+        // tenant = "{surrogate_id}:{cowork_id}"
+        if (resolvedTenant == null && resolvedSurrogate != null && resolvedCowork != null) {
+            resolvedTenant = resolvedSurrogate + ":" + resolvedCowork;
         }
         if (resolvedTenant == null) {
             resolvedTenant = "default";
@@ -221,6 +231,7 @@ public class PostgresStateStoreServiceImpl implements PostgresStateStoreService 
         entity.setId(sessionId);
         entity.setTenantId(resolvedTenant);
         entity.setUserId(resolvedUser);
+        entity.setSurrogateId(resolvedSurrogate);
         entity.setCoworkId(resolvedCowork);
         entity.setSource(resolvedSource);
         entity.setInstallId(blankToNull(installId));
@@ -316,6 +327,7 @@ public class PostgresStateStoreServiceImpl implements PostgresStateStoreService 
         dto.setId(row.getId());
         dto.setTenantId(row.getTenantId());
         dto.setUserId(row.getUserId());
+        dto.setSurrogateId(row.getSurrogateId());
         dto.setCoworkId(row.getCoworkId());
         dto.setSource(row.getSource());
         dto.setInstallId(row.getInstallId());

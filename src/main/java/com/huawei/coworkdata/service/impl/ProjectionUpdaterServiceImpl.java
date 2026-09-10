@@ -192,11 +192,30 @@ public class ProjectionUpdaterServiceImpl implements ProjectionUpdaterService {
         if (existing == null) {
             SessionEntity entity = new SessionEntity();
             entity.setId(event.getSessionId());
+            // user_id = 工号；surrogate_id = JWT sub
+            String username = stringVal(payload.get("username"));
+            String surrogate = firstString(payload, "surrogate_id", "surrogateId");
             String userId = stringVal(payload.get("user_id"));
-            if (userId == null || userId.trim().isEmpty()) {
-                userId = stringVal(payload.get("username"));
+            if (!isBlank(username)) {
+                entity.setUserId(username);
+            } else if (!isBlank(userId) && (surrogate == null || !userId.equals(surrogate))) {
+                // 新事件：user_id 已是工号；旧事件 user_id 可能是 surrogate
+                entity.setUserId(userId);
             }
-            entity.setUserId(userId);
+            if (isBlank(surrogate)) {
+                surrogate = stringVal(payload.get("surrogate_id"));
+            }
+            if (isBlank(surrogate) && !isBlank(userId) && (username == null || userId.equals(username) == false)
+                    && userId != null && userId.contains("-")) {
+                // 启发式：旧 SessionCreated 把 surrogate 写在 user_id
+                surrogate = userId;
+                if (isBlank(entity.getUserId()) || entity.getUserId().equals(surrogate)) {
+                    entity.setUserId(username);
+                }
+            }
+            if (!isBlank(surrogate)) {
+                entity.setSurrogateId(surrogate);
+            }
             String coworkId = stringVal(payload.get("cowork_id"));
             entity.setCoworkId(coworkId);
             String source = stringVal(payload.get("source"));
@@ -207,12 +226,13 @@ public class ProjectionUpdaterServiceImpl implements ProjectionUpdaterService {
                 tenant = event.getTenantId();
             }
             if ((tenant == null || tenant.trim().isEmpty() || "default".equals(tenant))
-                    && userId != null && coworkId != null) {
-                tenant = userId + ":" + coworkId;
+                    && !isBlank(surrogate) && coworkId != null) {
+                tenant = surrogate + ":" + coworkId;
             }
             entity.setTenantId(tenant != null ? tenant : "default");
             entity.setUserPrompt(payloadString(payload, "user_prompt", "userPrompt", ""));
             entity.setStatus("RUNNING");
+            entity.setTitle("");
             entity.setGoal("");
             entity.setRootAgentId(stringVal(payload.get("root_agent_id")));
             entity.setLlmProvider(stringVal(payload.get("llm_account")));
