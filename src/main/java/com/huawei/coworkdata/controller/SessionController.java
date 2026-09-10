@@ -120,9 +120,24 @@ public class SessionController {
         stateStore.appendSseEvent(sessionId, request.getEventJson());
     }
 
+    /** 清空 SSE 历史（地端水位重置后全量回填前调用） */
+    @DeleteMapping("/{sessionId}/sse-events")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void clearSseEvents(@PathVariable String sessionId) {
+        stateStore.clearSseEvents(sessionId);
+    }
+
     @GetMapping("/{sessionId}/sse-events")
     public List<String> loadSseEvents(@PathVariable String sessionId) {
         return stateStore.loadSseEvents(sessionId);
+    }
+
+    /** 地上游 tasks 全量 upsert（存量回填 / 投影漏写补齐） */
+    @PutMapping("/{sessionId}/tasks")
+    public void upsertTasks(
+            @PathVariable String sessionId,
+            @RequestBody List<Map<String, Object>> tasks) {
+        stateStore.upsertTasks(sessionId, tasks);
     }
 
     @PutMapping("/{sessionId}/workspace")

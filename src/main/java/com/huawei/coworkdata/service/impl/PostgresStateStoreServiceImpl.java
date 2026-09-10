@@ -96,6 +96,14 @@ public class PostgresStateStoreServiceImpl implements PostgresStateStoreService 
     }
 
     @Override
+    @Transactional
+    public void clearSseEvents(String sessionId) {
+        sessionSseEventMapper.delete(
+                new LambdaQueryWrapper<SessionSseEventEntity>()
+                        .eq(SessionSseEventEntity::getSessionId, sessionId));
+    }
+
+    @Override
     public List<String> loadSseEvents(String sessionId) {
         return sessionSseEventMapper.selectList(
                         new LambdaQueryWrapper<SessionSseEventEntity>()
@@ -104,6 +112,134 @@ public class PostgresStateStoreServiceImpl implements PostgresStateStoreService 
                 .stream()
                 .map(SessionSseEventEntity::getEventJson)
                 .collect(Collectors.toList());
+    }
+
+    @Override
+    @Transactional
+    public void upsertTasks(String sessionId, List<Map<String, Object>> tasks) {
+        if (tasks == null || tasks.isEmpty()) {
+            return;
+        }
+        // 会话须已存在（FK）
+        if (sessionMapper.selectById(sessionId) == null) {
+            ensureSessionForUpload(sessionId, null, null, null, "local", null, null);
+        }
+        for (Map<String, Object> raw : tasks) {
+            if (raw == null) {
+                continue;
+            }
+            String taskId = firstString(raw, "id");
+            if (taskId == null || taskId.isEmpty()) {
+                continue;
+            }
+            TaskEntity entity = taskMapper.selectById(taskId);
+            boolean insert = entity == null;
+            if (insert) {
+                entity = new TaskEntity();
+                entity.setId(taskId);
+            }
+            entity.setSessionId(sessionId);
+            String status = firstString(raw, "status");
+            if (status != null) {
+                entity.setStatus(status);
+            } else if (insert) {
+                entity.setStatus("PENDING");
+            }
+            String title = firstString(raw, "title");
+            if (title != null || insert) {
+                entity.setTitle(title != null ? title : "");
+            }
+            String description = firstString(raw, "description");
+            if (description != null || insert) {
+                entity.setDescription(description != null ? description : "");
+            }
+            if (raw.containsKey("user_prompt") || raw.containsKey("userPrompt")) {
+                entity.setUserPrompt(firstString(raw, "user_prompt", "userPrompt"));
+            }
+            if (raw.containsKey("assigned_agent_id") || raw.containsKey("assignedAgentId")) {
+                entity.setAssignedAgentId(firstString(raw, "assigned_agent_id", "assignedAgentId"));
+            }
+            if (raw.containsKey("creator_agent_id") || raw.containsKey("creatorAgentId")) {
+                entity.setCreatorAgentId(firstString(raw, "creator_agent_id", "creatorAgentId"));
+            }
+            if (raw.containsKey("is_daemon") || raw.containsKey("isDaemon")) {
+                Object d = raw.containsKey("is_daemon") ? raw.get("is_daemon") : raw.get("isDaemon");
+                entity.setIsDaemon(d instanceof Boolean ? (Boolean) d : Boolean.FALSE);
+            } else if (insert) {
+                entity.setIsDaemon(Boolean.FALSE);
+            }
+            if (raw.containsKey("outputs") || raw.containsKey("outputs_json") || raw.containsKey("outputsJson")) {
+                Object outputs = raw.containsKey("outputs") ? raw.get("outputs")
+                        : (raw.containsKey("outputs_json") ? raw.get("outputs_json") : raw.get("outputsJson"));
+                if (outputs instanceof String) {
+                    entity.setOutputsJson((String) outputs);
+                } else {
+                    entity.setOutputsJson(JsonUtils.toJson(outputs));
+                }
+            } else if (insert) {
+                entity.setOutputsJson("null");
+            }
+            if (raw.containsKey("error")) {
+                Object err = raw.get("error");
+                entity.setError(err == null ? null : String.valueOf(err));
+            }
+            OffsetDateTime created = parseOffset(raw.get("created_at"));
+            if (created == null) {
+                created = parseOffset(raw.get("createdAt"));
+            }
+            if (created != null) {
+                entity.setCreatedAt(created);
+            } else if (insert) {
+                entity.setCreatedAt(OffsetDateTime.now());
+            }
+            OffsetDateTime updated = parseOffset(raw.get("updated_at"));
+            if (updated == null) {
+                updated = parseOffset(raw.get("updatedAt"));
+            }
+            entity.setUpdatedAt(updated != null ? updated : OffsetDateTime.now());
+            if (insert) {
+                taskMapper.insert(entity);
+            } else {
+                taskMapper.updateById(entity);
+            }
+        }
+    }
+
+    private static String firstString(Map<String, Object> raw, String... keys) {
+        for (String key : keys) {
+            if (!raw.containsKey(key)) {
+                continue;
+            }
+            Object v = raw.get(key);
+            if (v == null) {
+                return null;
+            }
+            String s = String.valueOf(v).trim();
+            return s.isEmpty() ? null : s;
+        }
+        return null;
+    }
+
+    private static OffsetDateTime parseOffset(Object value) {
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof OffsetDateTime) {
+            return (OffsetDateTime) value;
+        }
+        String s = String.valueOf(value).trim();
+        if (s.isEmpty()) {
+            return null;
+        }
+        try {
+            return OffsetDateTime.parse(s);
+        } catch (Exception ignored) {
+            try {
+                return OffsetDateTime.parse(s.replace(" ", "T"));
+            } catch (Exception e2) {
+                return null;
+            }
+        }
     }
 
     @Override

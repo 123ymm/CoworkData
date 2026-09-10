@@ -21,7 +21,13 @@ public interface PostgresStateStoreService {
 
     void appendSseEvent(String sessionId, String eventJson);
 
+    /** 清空会话 SSE 历史（地端从水位 0 全量回填前调用，避免重复） */
+    void clearSseEvents(String sessionId);
+
     List<String> loadSseEvents(String sessionId);
+
+    /** 地上游 tasks 行 upsert（按 id；对齐本地 SQLite tasks） */
+    void upsertTasks(String sessionId, List<Map<String, Object>> tasks);
 
     void saveWorkspace(String sessionId, String workspace);
 
