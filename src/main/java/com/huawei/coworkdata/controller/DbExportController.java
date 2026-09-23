@@ -29,11 +29,11 @@ public class DbExportController {
 
     @GetMapping("/export-all")
     public ResponseEntity<StreamingResponseBody> exportAll() {
-        String filename = "coworkdata-" + FILE_TS.format(Instant.now()) + ".json";
+        String filename = "coworkdata-" + FILE_TS.format(Instant.now()) + ".zip";
         StreamingResponseBody body = dbExportService::writeAllTables;
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
-                .contentType(MediaType.APPLICATION_JSON)
+                .contentType(MediaType.parseMediaType("application/zip"))
                 .body(body);
     }
 }

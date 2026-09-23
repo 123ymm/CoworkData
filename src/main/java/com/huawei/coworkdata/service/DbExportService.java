@@ -9,8 +9,8 @@ import java.io.OutputStream;
 public interface DbExportService {
 
     /**
-     * 将白名单内全部表以流式 JSON 写入 {@code out}。
-     * 形如：{@code {"exported_at":"...","tables":{"sessions":[...], ...}}}
+     * 将白名单内全部表写入 ZIP（压缩文件夹）：
+     * {@code manifest.json} + 每表一个 {@code {table}.json} 数组文件。
      */
     void writeAllTables(OutputStream out) throws IOException;
 }

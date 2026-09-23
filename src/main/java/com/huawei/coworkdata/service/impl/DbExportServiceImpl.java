@@ -21,9 +21,11 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 
 /**
- * 按 schema.sql 白名单表导出；表名仅来自常量，不接受外部输入。
+ * 按 schema.sql 白名单表导出为 ZIP；表名仅来自常量，不接受外部输入。
  */
 @Service
 @RequiredArgsConstructor
@@ -48,32 +50,63 @@ public class DbExportServiceImpl implements DbExportService {
 
     @Override
     public void writeAllTables(OutputStream out) throws IOException {
-        JsonGenerator gen = JsonUtils.mapper().getFactory().createGenerator(out);
+        ZipOutputStream zip = new ZipOutputStream(out);
         try {
-            gen.writeStartObject();
-            gen.writeStringField("exported_at", Instant.now().toString());
-            gen.writeObjectFieldStart("tables");
+            writeManifest(zip);
             for (String table : ALLOWED_TABLES) {
-                writeTable(gen, table);
+                writeTableEntry(zip, table);
             }
-            gen.writeEndObject();
-            gen.writeEndObject();
+            zip.finish();
         } finally {
-            gen.flush();
+            zip.flush();
         }
     }
 
-    private void writeTable(JsonGenerator gen, String table) throws IOException {
-        gen.writeArrayFieldStart(table);
-        // 表名仅来自白名单常量，禁止拼接外部输入
-        jdbcTemplate.query("SELECT * FROM " + table, rs -> {
-            try {
-                gen.writeObject(rowToMap(rs));
-            } catch (IOException e) {
-                throw new IllegalStateException("Failed to write row for table " + table, e);
+    private void writeManifest(ZipOutputStream zip) throws IOException {
+        zip.putNextEntry(new ZipEntry("manifest.json"));
+        JsonGenerator gen = openGenerator(zip);
+        try {
+            gen.writeStartObject();
+            gen.writeStringField("exported_at", Instant.now().toString());
+            gen.writeArrayFieldStart("tables");
+            for (String table : ALLOWED_TABLES) {
+                gen.writeString(table);
             }
-        });
-        gen.writeEndArray();
+            gen.writeEndArray();
+            gen.writeEndObject();
+            gen.flush();
+        } finally {
+            gen.close();
+        }
+        zip.closeEntry();
+    }
+
+    private void writeTableEntry(ZipOutputStream zip, String table) throws IOException {
+        zip.putNextEntry(new ZipEntry(table + ".json"));
+        JsonGenerator gen = openGenerator(zip);
+        try {
+            gen.writeStartArray();
+            // 表名仅来自白名单常量，禁止拼接外部输入
+            jdbcTemplate.query("SELECT * FROM " + table, rs -> {
+                try {
+                    gen.writeObject(rowToMap(rs));
+                } catch (IOException e) {
+                    throw new IllegalStateException("Failed to write row for table " + table, e);
+                }
+            });
+            gen.writeEndArray();
+            gen.flush();
+        } finally {
+            gen.close();
+        }
+        zip.closeEntry();
+    }
+
+    /** 不关闭底层 ZipOutputStream，以便继续写入后续 entry。 */
+    private static JsonGenerator openGenerator(OutputStream target) throws IOException {
+        JsonGenerator gen = JsonUtils.mapper().getFactory().createGenerator(target);
+        gen.disable(JsonGenerator.Feature.AUTO_CLOSE_TARGET);
+        return gen;
     }
 
     private static Map<String, Object> rowToMap(ResultSet rs) throws SQLException {
