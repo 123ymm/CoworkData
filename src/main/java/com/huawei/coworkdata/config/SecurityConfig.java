@@ -16,6 +16,7 @@ public class SecurityConfig {
                 .csrf().disable()
                 .authorizeRequests()
                 .antMatchers("/api/**").permitAll()
+                .antMatchers("/", "/index.html", "/**/*.html", "/**/*.css", "/**/*.js").permitAll()
                 .anyRequest().authenticated();
         return http.build();
     }
