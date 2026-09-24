@@ -15,7 +15,7 @@ import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 
 /**
- * 整库数据下载。
+ * 整库流式下载（ZIP 直写响应，不落盘）。
  */
 @RestController
 @RequestMapping("/api/db")

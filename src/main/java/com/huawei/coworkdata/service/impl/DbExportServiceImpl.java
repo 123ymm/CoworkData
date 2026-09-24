@@ -21,11 +21,13 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.zip.Deflater;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
 /**
- * 按 schema.sql 白名单表导出为 ZIP；表名仅来自常量，不接受外部输入。
+ * 按 schema.sql 白名单表流式导出 ZIP（直写响应，不落临时文件）；
+ * 表名仅来自常量，不接受外部输入。
  */
 @Service
 @RequiredArgsConstructor
@@ -51,14 +53,19 @@ public class DbExportServiceImpl implements DbExportService {
     @Override
     public void writeAllTables(OutputStream out) throws IOException {
         ZipOutputStream zip = new ZipOutputStream(out);
+        // 优先速度，减小 CPU 与客户端等待；体积略大可接受
+        zip.setLevel(Deflater.BEST_SPEED);
         try {
             writeManifest(zip);
             for (String table : ALLOWED_TABLES) {
                 writeTableEntry(zip, table);
             }
             zip.finish();
-        } finally {
             zip.flush();
+        } catch (IOException ex) {
+            throw ex;
+        } catch (RuntimeException ex) {
+            throw new IOException("Export failed: " + ex.getMessage(), ex);
         }
     }
 

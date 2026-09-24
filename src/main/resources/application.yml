@@ -10,6 +10,12 @@ spring:
     init:
       mode: always
       schema-locations: classpath:schema.sql
+  # 整库流式导出可能较久，避免 AsyncRequestTimeoutException 中断下载
+  mvc:
+    async:
+      request-timeout: 3600000
+
+
 
 coworkdata:
   snapshot:
