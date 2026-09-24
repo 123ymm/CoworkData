@@ -12,6 +12,7 @@
       --btn: #0b6e4f;
       --btn-hover: #095c42;
       --btn-disabled: #9aab9f;
+      --err: #b42318;
     }
     * { box-sizing: border-box; }
     body {
@@ -30,6 +31,7 @@
     main {
       text-align: center;
       padding: 2rem;
+      max-width: 28rem;
     }
     h1 {
       margin: 0 0 0.5rem;
@@ -42,6 +44,13 @@
       color: var(--muted);
       font-size: 0.95rem;
     }
+    #status {
+      min-height: 1.4rem;
+      margin: 0 0 1rem;
+      font-size: 0.9rem;
+      color: var(--muted);
+    }
+    #status.is-error { color: var(--err); }
     button {
       appearance: none;
       border: none;
@@ -70,17 +79,93 @@
   <main>
     <h1>CoworkData</h1>
     <p>下载数据库全部业务表数据（ZIP 压缩包）</p>
+    <p id="status" aria-live="polite"></p>
     <button type="button" id="btn">下载全部数据</button>
   </main>
   <script>
     (function () {
       var btn = document.getElementById("btn");
+      var statusEl = document.getElementById("status");
+      var pollTimer = null;
+
+      function setStatus(text, isError) {
+        statusEl.textContent = text || "";
+        statusEl.className = isError ? "is-error" : "";
+      }
+
+      function resetBtn() {
+        btn.disabled = false;
+        btn.textContent = "下载全部数据";
+      }
+
+      function stopPoll() {
+        if (pollTimer) {
+          clearInterval(pollTimer);
+          pollTimer = null;
+        }
+      }
+
+      function pollJob(jobId) {
+        fetch("/api/db/export-jobs/" + encodeURIComponent(jobId))
+          .then(function (res) {
+            if (!res.ok) {
+              return res.text().then(function (t) {
+                throw new Error(t || ("查询失败 HTTP " + res.status));
+              });
+            }
+            return res.json();
+          })
+          .then(function (job) {
+            if (job.status === "RUNNING") {
+              setStatus(job.message || "导出进行中…");
+              return;
+            }
+            stopPoll();
+            if (job.status === "DONE") {
+              setStatus("导出完成，开始下载…");
+              window.location.href = "/api/db/export-jobs/" + encodeURIComponent(jobId) + "/file";
+              resetBtn();
+              return;
+            }
+            setStatus(job.message || "导出失败", true);
+            resetBtn();
+          })
+          .catch(function (err) {
+            stopPoll();
+            setStatus(err.message || String(err), true);
+            resetBtn();
+          });
+      }
+
       btn.addEventListener("click", function () {
         btn.disabled = true;
-        window.location.href = "/api/db/export-all";
-        setTimeout(function () {
-          btn.disabled = false;
-        }, 2000);
+        btn.textContent = "导出中…";
+        setStatus("正在创建导出任务…");
+        stopPoll();
+
+        fetch("/api/db/export-jobs", { method: "POST" })
+          .then(function (res) {
+            if (res.status === 429) {
+              throw new Error("已有导出任务在执行，请稍后再试");
+            }
+            if (!res.ok) {
+              return res.text().then(function (t) {
+                throw new Error(t || ("创建失败 HTTP " + res.status));
+              });
+            }
+            return res.json();
+          })
+          .then(function (job) {
+            setStatus(job.message || "导出进行中…");
+            pollJob(job.jobId);
+            pollTimer = setInterval(function () {
+              pollJob(job.jobId);
+            }, 2000);
+          })
+          .catch(function (err) {
+            setStatus(err.message || String(err), true);
+            resetBtn();
+          });
       });
     })();
   </script>
