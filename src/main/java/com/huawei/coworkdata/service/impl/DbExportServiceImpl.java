@@ -3,7 +3,7 @@ package com.huawei.coworkdata.service.impl;
 import com.fasterxml.jackson.core.JsonGenerator;
 import com.huawei.coworkdata.service.DbExportService;
 import com.huawei.coworkdata.util.JsonUtils;
-import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
@@ -21,44 +21,66 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.zip.Deflater;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
 /**
  * 按 schema.sql 白名单表流式导出 ZIP（直写响应，不落临时文件）；
- * 表名仅来自常量，不接受外部输入。
+ * 表内按主键游标分批查询，避免一次 SELECT * 拖垮大表。
  */
 @Service
-@RequiredArgsConstructor
 public class DbExportServiceImpl implements DbExportService {
 
+    /** 表名 + 游标列（均来自常量白名单）。 */
+    private static final class TableSpec {
+        final String table;
+        final String keyColumn;
+        /** true = 数值主键（如 SERIAL）；false = 字符串主键。 */
+        final boolean numericKey;
+
+        TableSpec(String table, String keyColumn, boolean numericKey) {
+            this.table = table;
+            this.keyColumn = keyColumn;
+            this.numericKey = numericKey;
+        }
+    }
+
     /** 与 schema.sql 业务表对齐；顺序固定便于核对。 */
-    static final List<String> ALLOWED_TABLES = Collections.unmodifiableList(Arrays.asList(
-            "sessions",
-            "tasks",
-            "events",
-            "session_sse_events",
-            "snapshots",
-            "memory_events",
-            "memory_subscriptions",
-            "agent_templates",
-            "user_profile",
-            "cowork",
-            "cowork_permission"
+    static final List<TableSpec> EXPORT_TABLES = Collections.unmodifiableList(Arrays.asList(
+            new TableSpec("sessions", "id", false),
+            new TableSpec("tasks", "id", false),
+            new TableSpec("events", "id", false),
+            new TableSpec("session_sse_events", "id", true),
+            new TableSpec("snapshots", "id", false),
+            new TableSpec("memory_events", "id", false),
+            new TableSpec("memory_subscriptions", "id", false),
+            new TableSpec("agent_templates", "id", false),
+            new TableSpec("user_profile", "user_id", false),
+            new TableSpec("cowork", "cowork_id", false),
+            new TableSpec("cowork_permission", "cowork_id", false)
     ));
 
     private final JdbcTemplate jdbcTemplate;
+    private final int batchSize;
+
+    public DbExportServiceImpl(
+            JdbcTemplate jdbcTemplate,
+            @Value("${coworkdata.export.batch-size:2000}") int batchSize) {
+        this.jdbcTemplate = jdbcTemplate;
+        this.batchSize = batchSize > 0 ? batchSize : 2000;
+    }
 
     @Override
     public void writeAllTables(OutputStream out) throws IOException {
         ZipOutputStream zip = new ZipOutputStream(out);
-        // 优先速度，减小 CPU 与客户端等待；体积略大可接受
         zip.setLevel(Deflater.BEST_SPEED);
         try {
             writeManifest(zip);
-            for (String table : ALLOWED_TABLES) {
-                writeTableEntry(zip, table);
+            for (TableSpec spec : EXPORT_TABLES) {
+                writeTableEntry(zip, spec);
             }
             zip.finish();
             zip.flush();
@@ -75,9 +97,10 @@ public class DbExportServiceImpl implements DbExportService {
         try {
             gen.writeStartObject();
             gen.writeStringField("exported_at", Instant.now().toString());
+            gen.writeNumberField("batch_size", batchSize);
             gen.writeArrayFieldStart("tables");
-            for (String table : ALLOWED_TABLES) {
-                gen.writeString(table);
+            for (TableSpec spec : EXPORT_TABLES) {
+                gen.writeString(spec.table);
             }
             gen.writeEndArray();
             gen.writeEndObject();
@@ -88,19 +111,24 @@ public class DbExportServiceImpl implements DbExportService {
         zip.closeEntry();
     }
 
-    private void writeTableEntry(ZipOutputStream zip, String table) throws IOException {
-        zip.putNextEntry(new ZipEntry(table + ".json"));
+    private void writeTableEntry(ZipOutputStream zip, TableSpec spec) throws IOException {
+        zip.putNextEntry(new ZipEntry(spec.table + ".json"));
         JsonGenerator gen = openGenerator(zip);
         try {
             gen.writeStartArray();
-            // 表名仅来自白名单常量，禁止拼接外部输入
-            jdbcTemplate.query("SELECT * FROM " + table, rs -> {
-                try {
-                    gen.writeObject(rowToMap(rs));
-                } catch (IOException e) {
-                    throw new IllegalStateException("Failed to write row for table " + table, e);
+            // lastKey 仅存在于本次导出请求的局部变量（游标），不落库、不写前端
+            Object lastKey = null;
+            while (true) {
+                AtomicReference<Object> batchLastKey = new AtomicReference<Object>();
+                int written = writeBatch(gen, spec, lastKey, batchLastKey);
+                if (written == 0) {
+                    break;
                 }
-            });
+                lastKey = batchLastKey.get();
+                if (written < batchSize) {
+                    break;
+                }
+            }
             gen.writeEndArray();
             gen.flush();
         } finally {
@@ -109,7 +137,66 @@ public class DbExportServiceImpl implements DbExportService {
         zip.closeEntry();
     }
 
-    /** 不关闭底层 ZipOutputStream，以便继续写入后续 entry。 */
+    /**
+     * 按主键游标拉一批并立刻写入 JSON；返回本批行数。
+     */
+    private int writeBatch(
+            JsonGenerator gen,
+            TableSpec spec,
+            Object lastKey,
+            AtomicReference<Object> batchLastKey) {
+        final AtomicInteger count = new AtomicInteger();
+        // 表名/列名仅来自白名单常量
+        final String table = spec.table;
+        final String keyColumn = spec.keyColumn;
+
+        if (lastKey == null) {
+            String sql = "SELECT * FROM " + table + " ORDER BY " + keyColumn + " ASC LIMIT ?";
+            jdbcTemplate.query(sql, new Object[]{batchSize}, rs -> {
+                writeRow(gen, spec, rs, batchLastKey, count);
+            });
+        } else {
+            String sql = "SELECT * FROM " + table
+                    + " WHERE " + keyColumn + " > ? ORDER BY " + keyColumn + " ASC LIMIT ?";
+            jdbcTemplate.query(sql, new Object[]{lastKey, batchSize}, rs -> {
+                writeRow(gen, spec, rs, batchLastKey, count);
+            });
+        }
+        return count.get();
+    }
+
+    private static void writeRow(
+            JsonGenerator gen,
+            TableSpec spec,
+            ResultSet rs,
+            AtomicReference<Object> batchLastKey,
+            AtomicInteger count) throws SQLException {
+        try {
+            Map<String, Object> row = rowToMap(rs);
+            gen.writeObject(row);
+            batchLastKey.set(extractKey(rs, spec));
+            count.incrementAndGet();
+        } catch (IOException e) {
+            throw new IllegalStateException("Failed to write row for table " + spec.table, e);
+        }
+    }
+
+    /** 从 ResultSet 取游标列原始值（保持数值/字符串类型，便于下一轮绑定参数）。 */
+    private static Object extractKey(ResultSet rs, TableSpec spec) throws SQLException {
+        Object raw = rs.getObject(spec.keyColumn);
+        if (raw == null) {
+            throw new IllegalStateException("Null cursor key in table " + spec.table
+                    + " column " + spec.keyColumn);
+        }
+        if (spec.numericKey) {
+            if (raw instanceof Number) {
+                return ((Number) raw).longValue();
+            }
+            return Long.valueOf(raw.toString());
+        }
+        return raw.toString();
+    }
+
     private static JsonGenerator openGenerator(OutputStream target) throws IOException {
         JsonGenerator gen = JsonUtils.mapper().getFactory().createGenerator(target);
         gen.disable(JsonGenerator.Feature.AUTO_CLOSE_TARGET);
