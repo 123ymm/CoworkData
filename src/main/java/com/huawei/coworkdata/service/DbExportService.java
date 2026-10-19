@@ -11,5 +11,7 @@ public interface DbExportService {
     /**
      * 流式写入 ZIP（不落盘）：{@code manifest.json} + 每表一个 {@code {table}.json}。
      */
+    void writeByUploadDate(OutputStream out, java.time.LocalDate start, java.time.LocalDate end) throws IOException;
+
     void writeAllTables(OutputStream out) throws IOException;
 }

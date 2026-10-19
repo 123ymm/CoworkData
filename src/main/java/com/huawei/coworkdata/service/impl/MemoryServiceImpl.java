@@ -12,6 +12,7 @@ import com.huawei.coworkdata.service.MemoryService;
 import com.huawei.coworkdata.util.JsonUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import com.huawei.coworkdata.service.SessionUploadDailyService;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
@@ -27,6 +28,8 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 public class MemoryServiceImpl implements MemoryService {
+
+    private final SessionUploadDailyService uploadDaily;
 
     private final MemoryEventMapper memoryEventMapper;
     private final MemorySubscriptionMapper subscriptionMapper;
@@ -79,6 +82,7 @@ public class MemoryServiceImpl implements MemoryService {
         entity.setMetadataJson(JsonUtils.toJson(dto.getMetadata() != null ? dto.getMetadata() : Collections.emptyMap()));
         entity.setTimestamp(dto.getTimestamp() != null ? dto.getTimestamp() : OffsetDateTime.now());
         memoryEventMapper.insert(entity);
+        uploadDaily.record(dto.getSessionId());
         return eventId;
     }
 
@@ -176,6 +180,7 @@ public class MemoryServiceImpl implements MemoryService {
             }
             if (dirty) {
                 subscriptionMapper.updateById(existing);
+                uploadDaily.record(sessionId);
             }
             return existing.getId();
         }
@@ -197,6 +202,7 @@ public class MemoryServiceImpl implements MemoryService {
         entity.setIntent(intent);
         entity.setCreatedAt(createdAt != null ? createdAt : OffsetDateTime.now());
         subscriptionMapper.insert(entity);
+        uploadDaily.record(sessionId);
         return subId;
     }
 

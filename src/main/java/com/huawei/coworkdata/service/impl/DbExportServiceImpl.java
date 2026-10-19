@@ -14,6 +14,10 @@ import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.util.ArrayList;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.annotation.Isolation;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.Arrays;
@@ -75,13 +79,33 @@ public class DbExportServiceImpl implements DbExportService {
 
     @Override
     public void writeAllTables(OutputStream out) throws IOException {
-        ZipOutputStream zip = new ZipOutputStream(out);
-        zip.setLevel(Deflater.BEST_SPEED);
-        try {
-            writeManifest(zip);
+        writeArchive(out, null, null);
+    }
+
+    @Override
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
+    public void writeByUploadDate(OutputStream out, LocalDate start, LocalDate end) throws IOException {
+        if (start == null || end == null || start.isAfter(end)) {
+            throw new IllegalArgumentException("Invalid upload date range");
+        }
+        writeArchive(out, start, end);
+    }
+
+    private void writeArchive(OutputStream out, LocalDate start, LocalDate end) throws IOException {
+        try (ZipOutputStream zip = new ExportZipStream(out)) {
+            zip.setLevel(Deflater.BEST_SPEED);
+            Map<String, Long> counts = new LinkedHashMap<>();
+            writeManifest(zip, start, end);
             for (TableSpec spec : EXPORT_TABLES) {
-                writeTableEntry(zip, spec);
+                if (start == null || !"agent_templates".equals(spec.table)) {
+                    counts.put(spec.table, writeTableEntry(zip, spec, start, end));
+                }
             }
+            zip.putNextEntry(new ZipEntry("export-summary.json"));
+            try (JsonGenerator gen = openGenerator(zip)) {
+                gen.writeObject(counts);
+            }
+            zip.closeEntry();
             zip.finish();
             zip.flush();
         } catch (IOException ex) {
@@ -91,16 +115,26 @@ public class DbExportServiceImpl implements DbExportService {
         }
     }
 
-    private void writeManifest(ZipOutputStream zip) throws IOException {
+    private void writeManifest(ZipOutputStream zip, LocalDate start, LocalDate end) throws IOException {
         zip.putNextEntry(new ZipEntry("manifest.json"));
         JsonGenerator gen = openGenerator(zip);
         try {
             gen.writeStartObject();
             gen.writeStringField("exported_at", Instant.now().toString());
             gen.writeNumberField("batch_size", batchSize);
+            gen.writeStringField("scope", start == null ? "all_business_tables" : "full_sessions_with_upload_activity");
+            if (start != null) {
+                gen.writeStringField("start_date", start.toString());
+                gen.writeStringField("end_date", end.toString());
+                gen.writeStringField("timezone", "Asia/Shanghai");
+                gen.writeStringField("consistency", "repeatable_read_snapshot");
+                gen.writeStringField("history", "Recorded upload activity; optional legacy baseline uses assigned date 2026-10-18, not actual upload time");
+            }
             gen.writeArrayFieldStart("tables");
             for (TableSpec spec : EXPORT_TABLES) {
-                gen.writeString(spec.table);
+                if (start == null || !"agent_templates".equals(spec.table)) {
+                    gen.writeString(spec.table);
+                }
             }
             gen.writeEndArray();
             gen.writeEndObject();
@@ -111,7 +145,8 @@ public class DbExportServiceImpl implements DbExportService {
         zip.closeEntry();
     }
 
-    private void writeTableEntry(ZipOutputStream zip, TableSpec spec) throws IOException {
+    private long writeTableEntry(ZipOutputStream zip, TableSpec spec, LocalDate start, LocalDate end) throws IOException {
+        long total = 0;
         zip.putNextEntry(new ZipEntry(spec.table + ".json"));
         JsonGenerator gen = openGenerator(zip);
         try {
@@ -120,10 +155,11 @@ public class DbExportServiceImpl implements DbExportService {
             Object lastKey = null;
             while (true) {
                 AtomicReference<Object> batchLastKey = new AtomicReference<Object>();
-                int written = writeBatch(gen, spec, lastKey, batchLastKey);
+                int written = writeBatch(gen, spec, lastKey, batchLastKey, start, end);
                 if (written == 0) {
                     break;
                 }
+                total += written;
                 lastKey = batchLastKey.get();
                 if (written < batchSize) {
                     break;
@@ -135,6 +171,7 @@ public class DbExportServiceImpl implements DbExportService {
             gen.close();
         }
         zip.closeEntry();
+        return total;
     }
 
     /**
@@ -144,25 +181,45 @@ public class DbExportServiceImpl implements DbExportService {
             JsonGenerator gen,
             TableSpec spec,
             Object lastKey,
-            AtomicReference<Object> batchLastKey) {
+            AtomicReference<Object> batchLastKey, LocalDate start, LocalDate end) {
         final AtomicInteger count = new AtomicInteger();
         // 表名/列名仅来自白名单常量
         final String table = spec.table;
         final String keyColumn = spec.keyColumn;
 
-        if (lastKey == null) {
-            String sql = "SELECT * FROM " + table + " ORDER BY " + keyColumn + " ASC LIMIT ?";
-            jdbcTemplate.query(sql, new Object[]{batchSize}, rs -> {
-                writeRow(gen, spec, rs, batchLastKey, count);
-            });
-        } else {
-            String sql = "SELECT * FROM " + table
-                    + " WHERE " + keyColumn + " > ? ORDER BY " + keyColumn + " ASC LIMIT ?";
-            jdbcTemplate.query(sql, new Object[]{lastKey, batchSize}, rs -> {
-                writeRow(gen, spec, rs, batchLastKey, count);
-            });
+        List<Object> args = new ArrayList<>();
+        StringBuilder sql = new StringBuilder("SELECT t.* FROM " + table + " t WHERE 1=1");
+        if (start != null) {
+            sql.append(" AND ").append(datePredicate(table));
+            args.add(java.sql.Date.valueOf(start));
+            args.add(java.sql.Date.valueOf(end));
         }
+        if (lastKey != null) {
+            sql.append(" AND t.").append(keyColumn).append(" > ?");
+            args.add(lastKey);
+        }
+        sql.append(" ORDER BY t.").append(keyColumn).append(" ASC LIMIT ?");
+        args.add(batchSize);
+        jdbcTemplate.query(sql.toString(), args.toArray(), rs -> {
+            writeRow(gen, spec, rs, batchLastKey, count);
+        });
         return count.get();
+    }
+
+    private static String datePredicate(String table) {
+        String selected = "EXISTS (SELECT 1 FROM session_upload_daily d WHERE "
+                + "d.session_id = s.id AND d.upload_date >= ? AND d.upload_date <= ?)";
+        String relation;
+        if ("sessions".equals(table)) {
+            relation = "s.id = t.id";
+        } else if ("user_profile".equals(table)) {
+            relation = "s.user_id = t.user_id";
+        } else if ("cowork".equals(table) || "cowork_permission".equals(table)) {
+            relation = "s.cowork_id = t.cowork_id";
+        } else {
+            relation = "s.id = t.session_id";
+        }
+        return "EXISTS (SELECT 1 FROM sessions s WHERE " + relation + " AND " + selected + ")";
     }
 
     private static void writeRow(
@@ -195,6 +252,13 @@ public class DbExportServiceImpl implements DbExportService {
             return Long.valueOf(raw.toString());
         }
         return raw.toString();
+    }
+
+    /** Release native compression resources, but never finalize a failed archive or close HTTP output. */
+    private static final class ExportZipStream extends ZipOutputStream {
+        ExportZipStream(OutputStream out) { super(out); }
+        @Override
+        public void close() { def.end(); }
     }
 
     private static JsonGenerator openGenerator(OutputStream target) throws IOException {

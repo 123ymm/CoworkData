@@ -14,6 +14,7 @@ import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import com.huawei.coworkdata.service.SessionUploadDailyService;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
@@ -29,6 +30,8 @@ import java.util.stream.Collectors;
 public class PostgresStateStoreServiceImpl implements PostgresStateStoreService {
 
     private static final Logger log = LoggerFactory.getLogger(PostgresStateStoreServiceImpl.class);
+
+    private final SessionUploadDailyService uploadDaily;
 
     private final SessionMapper sessionMapper;
     private final TaskMapper taskMapper;
@@ -93,6 +96,7 @@ public class PostgresStateStoreServiceImpl implements PostgresStateStoreService 
         entity.setSessionId(sessionId);
         entity.setEventJson(eventJson);
         sessionSseEventMapper.insert(entity);
+        uploadDaily.record(sessionId);
     }
 
     @Override
@@ -120,6 +124,8 @@ public class PostgresStateStoreServiceImpl implements PostgresStateStoreService 
         if (tasks == null || tasks.isEmpty()) {
             return;
         }
+        // Serialize task uploads with session /upload to keep lock ordering consistent.
+        Map<String, Object> sessionBefore = uploadDaily.snapshot("sessions", sessionId);
         // 会话须已存在（FK）
         if (sessionMapper.selectById(sessionId) == null) {
             ensureSessionForUpload(sessionId, null, null, null, "local", null, null);
@@ -132,6 +138,7 @@ public class PostgresStateStoreServiceImpl implements PostgresStateStoreService 
             if (taskId == null || taskId.isEmpty()) {
                 continue;
             }
+            Map<String, Object> before = uploadDaily.snapshot("tasks", taskId);
             TaskEntity entity = taskMapper.selectById(taskId);
             boolean insert = entity == null;
             if (insert) {
@@ -202,6 +209,10 @@ public class PostgresStateStoreServiceImpl implements PostgresStateStoreService 
             } else {
                 taskMapper.updateById(entity);
             }
+            uploadDaily.recordIfChanged("tasks", taskId, sessionId, before);
+        }
+        if (sessionBefore == null) {
+            uploadDaily.recordIfChanged("sessions", sessionId, sessionId, null);
         }
     }
 
@@ -245,6 +256,7 @@ public class PostgresStateStoreServiceImpl implements PostgresStateStoreService 
     @Override
     @Transactional
     public void saveWorkspace(String sessionId, String workspace) {
+        Map<String, Object> before = uploadDaily.snapshot("sessions", sessionId);
         SessionEntity update = new SessionEntity();
         update.setId(sessionId);
         update.setWorkspace(workspace);
@@ -253,6 +265,7 @@ public class PostgresStateStoreServiceImpl implements PostgresStateStoreService 
         if (updated == 0) {
             log.warn("save_workspace: session {} row not found", sessionId);
         }
+        uploadDaily.recordIfChanged("sessions", sessionId, sessionId, before);
     }
 
     @Override
@@ -270,11 +283,13 @@ public class PostgresStateStoreServiceImpl implements PostgresStateStoreService 
     @Override
     @Transactional
     public void updateSessionStatus(String sessionId, String status) {
+        Map<String, Object> before = uploadDaily.snapshot("sessions", sessionId);
         SessionEntity update = new SessionEntity();
         update.setId(sessionId);
         update.setStatus(status);
         update.setUpdatedAt(OffsetDateTime.now());
         sessionMapper.updateById(update);
+        uploadDaily.recordIfChanged("sessions", sessionId, sessionId, before);
     }
 
     @Override

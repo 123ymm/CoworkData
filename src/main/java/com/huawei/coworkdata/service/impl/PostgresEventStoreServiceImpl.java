@@ -12,6 +12,7 @@ import com.huawei.coworkdata.util.EventConverter;
 import com.huawei.coworkdata.util.JsonUtils;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import com.huawei.coworkdata.service.SessionUploadDailyService;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
@@ -24,14 +25,18 @@ import java.util.Map;
 @Service
 public class PostgresEventStoreServiceImpl implements PostgresEventStoreService {
 
+    private final SessionUploadDailyService uploadDaily;
+
     private final EventMapper eventMapper;
     private final SnapshotMapper snapshotMapper;
     private final int keepSnapshots;
 
     public PostgresEventStoreServiceImpl(
+            SessionUploadDailyService uploadDaily,
             EventMapper eventMapper,
             SnapshotMapper snapshotMapper,
             @Value("${coworkdata.snapshot.keep:3}") int keepSnapshots) {
+        this.uploadDaily = uploadDaily;
         this.eventMapper = eventMapper;
         this.snapshotMapper = snapshotMapper;
         this.keepSnapshots = Math.max(1, keepSnapshots);
@@ -41,6 +46,7 @@ public class PostgresEventStoreServiceImpl implements PostgresEventStoreService 
     @Transactional
     public void append(EventDto event) {
         eventMapper.insert(EventConverter.toEntity(event));
+        uploadDaily.record(event.getSessionId());
     }
 
     @Override
@@ -54,6 +60,7 @@ public class PostgresEventStoreServiceImpl implements PostgresEventStoreService 
             return false;
         }
         eventMapper.insert(EventConverter.toEntity(event));
+        uploadDaily.record(event.getSessionId());
         return true;
     }
 
@@ -119,6 +126,7 @@ public class PostgresEventStoreServiceImpl implements PostgresEventStoreService 
     @Override
     @Transactional
     public void saveSnapshot(RunSnapshotDto snapshot) {
+        Map<String, Object> before = uploadDaily.snapshot("snapshots", snapshot.getId());
         SnapshotEntity existing = snapshotMapper.selectById(snapshot.getId());
         if (existing != null) {
             existing.setSessionId(snapshot.getSessionId());
@@ -130,6 +138,7 @@ public class PostgresEventStoreServiceImpl implements PostgresEventStoreService 
                 existing.setCreatedAt(snapshot.getSnapshotAt());
             }
             snapshotMapper.updateById(existing);
+            uploadDaily.recordIfChanged("snapshots", snapshot.getId(), snapshot.getSessionId(), before);
             return;
         }
         SnapshotEntity entity = new SnapshotEntity();
@@ -141,6 +150,7 @@ public class PostgresEventStoreServiceImpl implements PostgresEventStoreService 
         entity.setSnapshotReason(snapshot.getSnapshotReason() != null ? snapshot.getSnapshotReason() : "");
         entity.setCreatedAt(snapshot.getSnapshotAt() != null ? snapshot.getSnapshotAt() : OffsetDateTime.now());
         snapshotMapper.insert(entity);
+        uploadDaily.record(snapshot.getSessionId());
         snapshotMapper.pruneOldSnapshots(snapshot.getSessionId(), Math.max(1, keepSnapshots));
     }
 

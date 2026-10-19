@@ -12,6 +12,7 @@ import com.huawei.coworkdata.service.SessionSyncService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import com.huawei.coworkdata.service.SessionUploadDailyService;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -21,6 +22,8 @@ import java.util.List;
 @Service
 @RequiredArgsConstructor
 public class SessionSyncServiceImpl implements SessionSyncService {
+
+    private final SessionUploadDailyService uploadDaily;
 
     private final PostgresStateStoreService stateStore;
     private final PostgresEventStoreService eventStore;
@@ -47,6 +50,7 @@ public class SessionSyncServiceImpl implements SessionSyncService {
         }
         List<EventDto> events = request.getEvents() != null ? request.getEvents() : Collections.emptyList();
 
+        java.util.Map<String, Object> before = uploadDaily.snapshot("sessions", sessionId);
         stateStore.ensureSessionForUpload(
                 sessionId,
                 request.getUserId(),
@@ -122,6 +126,8 @@ public class SessionSyncServiceImpl implements SessionSyncService {
                 request.getConfigJson(),
                 request.getWorkspace(),
                 request.getCreatedAt());
+
+        uploadDaily.recordIfChanged("sessions", sessionId, sessionId, before);
 
         SessionUploadResultDto result = new SessionUploadResultDto();
         result.setSessionId(sessionId);

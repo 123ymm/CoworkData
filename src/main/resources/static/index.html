@@ -65,16 +65,71 @@
       background: var(--btn-disabled);
       cursor: wait;
     }
+    form { margin-bottom: 1.5rem; text-align: left; }
+    label { display: block; margin: 0.75rem 0; }
+    input, select { width: 100%; padding: 0.6rem; margin-top: 0.3rem; font: inherit; }
+    form button { width: 100%; }
+    .hint { font-size: 0.85rem; line-height: 1.6; margin: 0.75rem 0; }
   </style>
 </head>
 <body>
   <main>
     <h1>CoworkData</h1>
-    <p>流式下载全部业务表（ZIP，不落服务器磁盘）</p>
+    <p>按上传日期下载会话数据</p>
+    <form id="date-form">
+      <label for="export-mode">下载范围
+        <select id="export-mode">
+          <option value="date">按上传日期选择</option>
+          <option value="legacy">2026年10月19日之前（历史数据）</option>
+        </select>
+      </label>
+      <div id="date-fields">
+        <label for="start-date">开始日期（北京时间）<input id="start-date" type="date" required></label>
+        <label for="end-date">结束日期（含当天）<input id="end-date" type="date" required></label>
+      </div>
+      <p class="hint" id="scope-hint">下载范围内有新增或更新的会话及其完整关联数据，包含其他日期的数据。</p>
+      <button type="submit" id="download-selected">按日期下载</button>
+      <p class="hint" id="date-message" role="status" aria-live="polite"></p>
+    </form>
     <button type="button" id="btn">下载全部数据</button>
   </main>
   <script>
     (function () {
+      var start = document.getElementById("start-date");
+      var end = document.getElementById("end-date");
+      var mode = document.getElementById("export-mode");
+      mode.addEventListener("change", function () {
+        var legacy = mode.value === "legacy";
+        document.getElementById("date-fields").hidden = legacy;
+        start.disabled = end.disabled = legacy;
+        start.required = end.required = !legacy;
+        document.getElementById("download-selected").textContent = legacy ? "下载历史数据" : "按日期下载";
+        document.getElementById("scope-hint").textContent = legacy
+          ? "下载统一归档为2026年10月19日之前的历史会话及其完整关联数据。历史归档完成后可用，尚未归档时请使用全量下载。"
+          : "下载范围内有新增或更新的会话及其完整关联数据，包含其他日期的数据。";
+        document.getElementById("date-message").textContent = "";
+      });
+      var parts = new Intl.DateTimeFormat("en-US", {
+        timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit"
+      }).formatToParts(new Date());
+      var dateParts = {};
+      parts.forEach(function (p) { dateParts[p.type] = p.value; });
+      start.value = end.value = dateParts.year + "-" + dateParts.month + "-" + dateParts.day;
+      document.getElementById("date-form").addEventListener("submit", function (event) {
+        event.preventDefault();
+        var message = document.getElementById("date-message");
+        // The historical bucket is internal; show its business label to the user.
+        var legacy = mode.value === "legacy";
+        var from = legacy ? "2026-10-18" : start.value;
+        var to = legacy ? "2026-10-18" : end.value;
+        if (!from || !to || from > to) {
+          message.textContent = "开始日期不能晚于结束日期。";
+          return;
+        }
+        message.textContent = "已发起下载，请在浏览器下载列表查看结果。无匹配数据时，ZIP 中的业务表为空数组。";
+        window.location.href = "/api/db/export-by-upload-date?startDate="
+          + encodeURIComponent(from) + "&endDate=" + encodeURIComponent(to);
+      });
       var btn = document.getElementById("btn");
       btn.addEventListener("click", function () {
         btn.disabled = true;
