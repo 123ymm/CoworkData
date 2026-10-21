@@ -2,7 +2,7 @@ package com.huawei.coworkdata.service.impl;
 
 import com.huawei.coworkdata.service.SessionUploadDailyService;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
+import org.junit.jupiter.api.condition.EnabledIf;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
@@ -11,14 +11,24 @@ import java.util.*;
 import java.util.concurrent.*;
 import static org.junit.jupiter.api.Assertions.*;
 
-/** Opt-in test against a dedicated PostgreSQL test database; creates its own isolated schema. */
-@EnabledIfEnvironmentVariable(named = "COWORK_TEST_POSTGRES_URL", matches = ".+")
+/** Opt-in PostgreSQL/openGauss test; creates and removes only its own isolated schema. */
+@EnabledIf("databaseConfigured")
 class UploadDailyPostgresTest {
+    private static String databaseVariable(String suffix) {
+        String prefix = System.getenv("COWORK_TEST_DATABASE_URL") != null
+                ? "COWORK_TEST_DATABASE_" : "COWORK_TEST_POSTGRES_";
+        return System.getenv(prefix + suffix);
+    }
+
+    static boolean databaseConfigured() {
+        String url = databaseVariable("URL");
+        return url != null && !url.trim().isEmpty();
+    }
+
     @Test void concurrentUpsertTimezoneAndRollback() throws Exception {
         String schema = "upload_test_" + UUID.randomUUID().toString().replace("-", "");
         DriverManagerDataSource ds = new DriverManagerDataSource(
-                System.getenv("COWORK_TEST_POSTGRES_URL"), System.getenv("COWORK_TEST_POSTGRES_USER"),
-                System.getenv("COWORK_TEST_POSTGRES_PASSWORD"));
+                databaseVariable("URL"), databaseVariable("USER"), databaseVariable("PASSWORD"));
         JdbcTemplate jdbc = new JdbcTemplate(ds);
         jdbc.execute("CREATE SCHEMA " + schema);
         ExecutorService workers = Executors.newFixedThreadPool(4);
@@ -64,6 +74,7 @@ class UploadDailyPostgresTest {
             assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM session_upload_daily WHERE session_id='later-untracked'", Integer.class));
             tx.execute(status -> { service.record("legacy-a"); return null; });
             assertEquals(2, jdbc.queryForObject("SELECT COUNT(*) FROM session_upload_daily WHERE session_id='legacy-a'", Integer.class));
+            UploadDailyConcurrency.assertFirstInsertRace(ds);
         } finally {
             workers.shutdownNow();
             workers.awaitTermination(30, TimeUnit.SECONDS);

@@ -29,7 +29,12 @@ SELECT b.session_id, b.assigned_date,
        TIMESTAMPTZ '2026-10-18 23:59:59+08'
 FROM session_upload_legacy_baseline b
 WHERE EXISTS (SELECT 1 FROM sessions s WHERE s.id = b.session_id)
-ON CONFLICT (session_id, upload_date) DO NOTHING;
+-- The table lock above serializes writers, so this is also safe on openGauss
+-- versions without ON CONFLICT. Preserve existing real or legacy activity.
+AND NOT EXISTS (
+    SELECT 1 FROM session_upload_daily d
+    WHERE d.session_id = b.session_id AND d.upload_date = b.assigned_date
+);
 
 COMMIT;
 

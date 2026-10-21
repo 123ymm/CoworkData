@@ -32,13 +32,10 @@ class UploadTrackingTest {
     @BeforeEach void setup() {
         daily = org.springframework.test.util.AopTestUtils.getUltimateTargetObject(dailyProxy);
         sid = UUID.randomUUID().toString();
-        // H2 cannot run PostgreSQL ON CONFLICT DO UPDATE. Test service decisions and
-        // transaction participation here; production UPSERT has a separate PostgreSQL test.
-        doAnswer(call -> {
-            jdbc.update("MERGE INTO session_upload_daily KEY(session_id,upload_date) VALUES(?,CURRENT_DATE,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)",
-                    call.getArgument(0, String.class));
-            return null;
-        }).when(daily).record(anyString());
+        // Only the database clock function is emulated. All production writes and
+        // savepoint handling execute unchanged against H2.
+        jdbc.execute("CREATE ALIAS IF NOT EXISTS statement_timestamp FOR "
+                + "'com.huawei.coworkdata.service.impl.UploadTestClock.now'");
         jdbc.update("INSERT INTO sessions(id) VALUES(?)", sid);
     }
     private void clearActivity() {
@@ -61,6 +58,7 @@ class UploadTrackingTest {
         jdbc.update("DELETE FROM sessions WHERE id=?", sid);
         sync.incrementalUpload(sid, new SessionIncrementalUploadRequest());
         verify(daily).record(sid);
+        assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM session_upload_daily WHERE session_id=?", Integer.class, sid));
     }
     @Test void taskRetryAndIgnoredNullsDoNotCount() {
         Map<String,Object> task = new HashMap<>();
@@ -127,6 +125,22 @@ class UploadTrackingTest {
         clearInvocations(daily);
         assertEquals(0, sync.incrementalUpload(sid, request).getAcceptedEventCount());
         verify(daily, never()).record(anyString());
+    }
+    @Test void uploadEndpointPersistsFirstEnsureAndIncrementalEvents() throws Exception {
+        jdbc.update("DELETE FROM sessions WHERE id=?", sid);
+        String path = "/api/sessions/" + sid + "/upload";
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post(path)
+                .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                .content("{\"events\":[]}"))
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.status().isOk());
+        String eventId = UUID.randomUUID().toString();
+        String body = "{\"events\":[{\"id\":\"" + eventId + "\",\"sessionId\":\"" + sid
+                + "\",\"type\":\"TestEvent\"}]}";
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post(path)
+                .contentType(org.springframework.http.MediaType.APPLICATION_JSON).content(body))
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.status().isOk());
+        assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM events WHERE id=?", Integer.class, eventId));
+        assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM session_upload_daily WHERE session_id=?", Integer.class, sid));
     }
     @Test void dateEndpointRejectsInvalidInputBeforeStreaming() throws Exception {
         String path = "/api/db/export-by-upload-date";

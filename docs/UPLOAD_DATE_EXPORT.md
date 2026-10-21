@@ -18,7 +18,11 @@
 
 `session_upload_daily` 以 `(session_id, upload_date)` 为联合主键，保存首次及末次有效上传时间。
 日期、时刻取服务器数据库时间（日期转换到 Asia/Shanghai），不取客户端创建时间。
-同一天多次写入使用 PostgreSQL 原子 UPSERT；与业务写入在同一事务，失败一起回滚。
+同一天多次写入使用普通 UPDATE / INSERT，与业务写入在同一事务，失败一起回滚。
+先更新当天记录，不存在则插入；并发首次插入发生唯一键冲突时，先回滚到插入前的保存点，
+再更新另一事务已创建的记录。首次时间取较早值，末次时间取较晚值。
+写入使用默认 READ COMMITTED 隔离级别；冲突后仍找不到记录则报错回滚，不返回虚假成功。
+在线汇总不依赖 ON CONFLICT / ON DUPLICATE KEY UPDATE，避免 PostgreSQL 与 openGauss 7 RC/LTS 的语法差异。
 
 记录路径：会话 `/upload`（新增会话、事件或实际投影变化）、任务 PUT、workspace/status PUT、
 SSE 追加、快照保存、memory ingest、订阅新增/更新。现有服务器不支持 SSE/memory 批量接口，
@@ -49,6 +53,8 @@ ZIP 含 manifest.json（口径、日期、时区）和 export-summary.json（实
 会话，不覆盖已有真实上传记录。`session_upload_legacy_baseline` 永久保存这批会话 ID、
 归档日期及真实回填时间；重复执行使用原基线，不会把之后新增的无记录会话归到历史日期。
 不要删除基线表。脚本会短暂阻塞汇总写入，建议在上传流量低时执行。
+回填脚本在该表锁内使用 NOT EXISTS 跳过已有记录，不依赖 ON CONFLICT。
+已经完成建表和历史回填的实例，本次汇总 SQL 兼容性修复只需更新服务，无需再次回填。
 
 回填的 first_uploaded_at / last_uploaded_at 固定为北京时间 2026-10-18 23:59:59，
 仅为归档占位时间；用基线表可区分真实上传与人为归档。查询 2026-10-18 即可包含这批历史会话。
@@ -65,10 +71,31 @@ X-Accel-Buffering: no 请求代理不缓冲；代理仍需正确配置超时。�
 
 ## 验证
 
-`mvn -Dtest=UploadDateExportTest,UploadTrackingTest,UploadDailyPostgresTest,ProjectionUpdaterUserPromptTest test`
+`mvn -Dtest=UploadDateExportTest,UploadTrackingTest,UploadDailyJdbcTest,UploadDailyPostgresTest,ProjectionUpdaterUserPromptTest test`
 
 H2 测试覆盖日期筛选、关联表、去重、分页、空结果、ZIP 结束目录、实际变更判断与事务回滚。
-H2 不支持生产 PostgreSQL UPSERT，UploadTrackingTest 对汇总写入使用测试替身。
-使用独立 PostgreSQL 测试库设置 `COWORK_TEST_POSTGRES_URL`、`COWORK_TEST_POSTGRES_USER`、
-`COWORK_TEST_POSTGRES_PASSWORD` 后，UploadDailyPostgresTest 验证真实 UPSERT、并发、日期和回滚。
+UploadTrackingTest 和 UploadDailyJdbcTest 执行实际汇总 SQL，仅为 H2 提供缺失的 statement_timestamp 时间函数。
+并发测试强制两个事务同时发现当天无记录，验证唯一键冲突、保存点恢复以及冲突前后业务写入的提交。
+使用独立 PostgreSQL/openGauss 测试库设置 `COWORK_TEST_DATABASE_URL`、`COWORK_TEST_DATABASE_USER`、
+`COWORK_TEST_DATABASE_PASSWORD` 后，UploadDailyPostgresTest 验证真实数据库上的写入、并发、日期、回滚和历史回填。
+兼容旧变量 `COWORK_TEST_POSTGRES_URL`、`COWORK_TEST_POSTGRES_USER`、`COWORK_TEST_POSTGRES_PASSWORD`。
 该测试创建随机隔离 schema，结束后删除自己的 schema；未配置时跳过。
+
+## 排查上传 HTTP 500
+
+客户端的 HTTP 500 只能说明服务端失败，不能直接确定数据库报错原因。
+在服务使用的数据库连接中执行 `SELECT version();`，保留完整版本（包括 RC/LTS 后缀）。
+openGauss 7.0.0 LTS 新增 ON CONFLICT，7.0.0-RC3 的 INSERT 文档未提供该语法，不能只按大版本推断兼容性。
+参考：[7.0.0 发行说明](https://docs.opengauss.org/zh/docs/7.0.0/release_notes/release_notes.html)、
+[RC3 INSERT](https://docs.opengauss.org/en/docs/7.0.0-RC3/sql_reference/insert.html)。
+
+同时检查 Java 服务端对应失败请求的异常栈，保留最底层 Caused by / SQLState / ERROR。
+例如 Linux 中，进入 JAR 所在目录后查找日志：
+
+```bash
+find . -maxdepth 3 -type f \( -name "*.log" -o -name "nohup.out" \)
+tail -n 500 nohup.out
+```
+
+将 nohup.out 换成实际日志路径；若由容器或 systemd 托管，应读取对应容器/服务的日志。
+仅有 H2 测试通过不能视为部署数据库已验证，也不能证明所有 500 均由汇总 SQL 引起。
