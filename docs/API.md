@@ -14,13 +14,13 @@ com.huawei.coworkdata
 └── util/           # 工具类
 ```
 
-调用链：`Controller` → `Service`（接口）→ `ServiceImpl` → `Mapper` → PostgreSQL
+调用链：`Controller` → `Service` → `Mapper` / `JdbcTemplate` → openGauss 7.0.0-RC3。
 
 ## 1. 概述
 
 **CoworkData 是一个数据持久化服务。**
 
-客户端（地端 cowork、Host 或其他服务）调用本服务暴露的 HTTP 接口，完成数据上传、查询回放与持久化入库；数据落在 PostgreSQL（会话投影、领域事件、SSE 历史、快照等）。
+客户端（地端 cowork、Host 或其他服务）调用 HTTP 接口上传、查询回放与持久化入库；数据落在 openGauss 7.0.0-RC3（会话投影、领域事件、SSE 历史、快照等）。当前使用 PostgreSQL JDBC 驱动，代码和 Python 模块中的 Postgres 名称予以保留。
 
 能力来源上对齐 `IpMasterCoworkPy` 的 `persistence` 层对外方法，并以 REST 形式对外提供。
 
@@ -28,7 +28,7 @@ com.huawei.coworkdata
 |---|---|
 | **服务定位** | 数据持久化服务（上传 / 入库 / 查询 / 回放） |
 | **Base URL** | `http://localhost:8080`（未配置 `server.port`，Spring Boot 默认 8080） |
-| **Content-Type** | `application/json`（除 GET 无 body 外） |
+| **Content-Type** | JSON 接口为 `application/json`；ZIP 下载为 `application/zip` |
 | **鉴权** | `/api/**` 当前 **免认证**（开发配置）；生产请加鉴权 |
 | **对应 Python** | `ipmastercowork.persistence`（不含 `migrations.py`、`models.py`、`_` 私有方法） |
 | **项目说明** | 见仓库根目录 [README.md](../README.md) |
@@ -49,7 +49,7 @@ com.huawei.coworkdata
 ├── skill-reporter/        ← SkillReporter
 ├── reconcile/             ← reconcile_stranded_running_sessions
 ├── user-profiles/         ← OAuth 用户字典（UserProfileController）
-├── db/                    ← 库初始化
+├── db/                    ← 库初始化、全量 / 按日期下载
 └── test/                  ← 连通性测试
 ```
 
@@ -59,7 +59,7 @@ com.huawei.coworkdata
 2. **会话 ID 放路径**：`/sessions/{sessionId}/...`。
 3. **会话全量事件回放**走 `GET /sessions/{sessionId}/events`（不再用 `/events/sessions/{id}`）。
 4. **流水线**：`POST /events/pipeline` 一次完成落库 → 投影 → 快照。
-5. **列表按用户**：`GET /sessions?userId=`（**必须**带 **surrogate_id**，不再提供无条件全量列表）。
+5. **列表按用户**：`GET /sessions?userId=`（必须传参；当前兼容按工号或 surrogate_id 查询，不提供无条件全量列表）。
 
 典型调用关系：
 
@@ -106,7 +106,8 @@ Host / 前端 ──HTTP──▶ CoworkData REST
 {
   "id": "ses_xxx",
   "tenantId": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee:my-cowork",
-  "userId": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+  "userId": "w30040833",
+  "surrogateId": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
   "coworkId": "my-cowork",
   "source": "local",
   "installId": "11111111-2222-3333-4444-555555555555",
@@ -129,8 +130,9 @@ Host / 前端 ──HTTP──▶ CoworkData REST
 
 合法 `status`：`RUNNING`、`SUCCEEDED`、`FAILED`、`CANCELED`、`INTERRUPTED`、`PAUSED_HITL`、`PAUSED`。
 
-- **`userId`**：substrate JWT `sub`（**surrogate_id**），不是工号；工号在 `user_profile.username`
-- **`tenantId`**：`{userId}:{coworkId}`；缺一侧时可能仍为历史值 `default`
+- **`userId`**：W3 工号，对应 `sessions.user_id` 和 `user_profile.user_id`；`user_profile.username` 为展示姓名
+- **`surrogateId`**：substrate JWT `sub`，对应 `sessions.surrogate_id`
+- **`tenantId`**：`{surrogateId}:{coworkId}`；缺一侧时可能仍为历史值 `default`
 - **`source`**：`local`（地端上传）或 `cloud`
 - **`installId`**：Electron 安装 UUID
 - `lastUploadIndex`：地端 cowork 上次上传到的进度索引，默认 `0`
@@ -230,8 +232,10 @@ Host / 前端 ──HTTP──▶ CoworkData REST
 | `GET` | `/api/sessions/{sessionId}/events` | 会话回放：领域事件表 `events` 全量（按 id 升序） |
 | `DELETE` | `/api/sessions/{sessionId}` | 软删（写 `delete_at`）；不存在 → **404**；**204** |
 | `GET` | `/api/sessions/{sessionId}/tasks` | 该会话任务列表 |
+| `PUT` | `/api/sessions/{sessionId}/tasks` | 提交任务对象数组，按任务 ID 新增 / 更新 |
 | `POST` | `/api/sessions/{sessionId}/sse-events` | 追加前端 SSE 历史（表 `session_sse_events`）；**201** |
 | `GET` | `/api/sessions/{sessionId}/sse-events` | 读取前端 SSE 历史（表 `session_sse_events`，非领域 `events`） |
+| `DELETE` | `/api/sessions/{sessionId}/sse-events` | 清空 SSE 历史，不作为有效上传记录 |
 | `PUT` | `/api/sessions/{sessionId}/workspace` | 写入 workspace |
 | `GET` | `/api/sessions/{sessionId}/workspace` | 读取 workspace |
 | `GET` | `/api/sessions/{sessionId}/status` | 读取 status |
@@ -243,7 +247,7 @@ Host / 前端 ──HTTP──▶ CoworkData REST
 ### 调用示例
 
 ```bash
-# 按用户列表（userId = surrogate_id）
+# 按用户列表（此例使用 surrogate_id，也兼容工号）
 curl "http://localhost:8080/api/sessions?userId=aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
 
 # 上传水位
@@ -253,7 +257,8 @@ curl http://localhost:8080/api/sessions/ses_abc123/upload-watermark
 curl -X POST http://localhost:8080/api/sessions/ses_abc123/upload \
   -H "Content-Type: application/json" \
   -d '{
-    "userId": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+    "userId": "w30040833",
+    "surrogateId": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
     "coworkId": "my-cowork",
     "source": "local",
     "installId": "11111111-2222-3333-4444-555555555555",
@@ -268,7 +273,7 @@ curl -X POST http://localhost:8080/api/sessions/ses_abc123/upload \
         "type": "SessionCreated",
         "timestamp": "2026-08-24T12:00:00+08:00",
         "tenantId": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee:my-cowork",
-        "payload": { "user_prompt": "你好", "user_id": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee", "cowork_id": "my-cowork" }
+        "payload": { "user_prompt": "你好", "user_id": "w30040833", "surrogate_id": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee", "cowork_id": "my-cowork" }
       }
     ]
   }'
@@ -304,6 +309,23 @@ curl -X DELETE http://localhost:8080/api/sessions/ses_abc123
 - 事件按 `id` 幂等；`uploadIndex < 当前水位` → **409**
 - 新写入事件的投影失败会回滚整批（含 append），水位不前进，便于地端重试重放
 - 会话不存在时自动创建最小投影行；随后 `SessionCreated` 会回填空壳上的投影字段
+
+成功响应示例（实际计数和水位以返回值为准）：
+
+```json
+{
+  "sessionId": "ses_abc123",
+  "previousUploadIndex": 0,
+  "lastUploadIndex": 50,
+  "acceptedEventCount": 1,
+  "skippedEventCount": 0
+}
+```
+
+`acceptedEventCount` 是实际新增事件数，`skippedEventCount` 是已存在而跳过的事件数，不表示整个客户端同步轮次完成。
+新增会话、事件或实际投影变化会在同一事务写入 `session_upload_daily`；汇总失败也会回滚本次上传。
+老会话当天发生增量写入同样计入当天；完全相同内容重传、仅修改水位不会产生新的有效上传。
+一条日汇总代表“某会话在某天有成功业务写入”，不是一次请求一条。任务、SSE、快照、memory 等其他写入路径也会记录，详见[上传日期口径](UPLOAD_DATE_EXPORT.md)。
 
 ---
 
@@ -431,7 +453,7 @@ curl -X POST http://localhost:8080/api/reconcile/stranded-running-sessions
 
 ---
 
-## 7. 数据库初始化 API（postgres.__init__）
+## 7. 数据库初始化 API（沿用 Python postgres.__init__ 命名）
 
 **Controller：** `DbInitController`  
 **前缀：** `/api/db`
@@ -455,7 +477,7 @@ curl -X POST http://localhost:8080/api/db/tables
 
 curl -X POST http://localhost:8080/api/db/init
 
-# 存量库补 DDL（V2–V6，含 tasks.title DEFAULT ''）
+# 旧版本迁移入口：先审核 V2–V8 脚本与目标数据库的兼容性
 curl -X POST http://localhost:8080/api/db/migrate-schema
 
 curl -X PUT http://localhost:8080/api/db/skill-reporter/sessions-store \
@@ -464,6 +486,36 @@ curl -X PUT http://localhost:8080/api/db/skill-reporter/sessions-store \
 ```
 
 说明：应用启动时 `spring.sql.init.mode=always` 也会执行 `schema.sql`，一般不必再调 `/tables`。
+
+上述旧迁移接口不等同于上传日汇总迁移。当前 RC3 环境应先检查旧迁移 SQL（V8 仍保留 `ON CONFLICT`），不要将 `/migrate-schema` 当作本次汇总修复的必做步骤。自动建表与手动回填的区别见[部署说明](DEPLOYMENT.md)。
+
+### 7.1 数据下载 API
+
+**Controller：** `DbExportController`；返回 `application/zip` 和附件文件名。
+
+| 方法 | 路径 | 范围 |
+|---|---|---|
+| `GET` | `/api/db/export-all` | 导出白名单中的全部业务数据 |
+| `GET` | `/api/db/export-by-upload-date?startDate=2026-10-19&endDate=2026-10-20` | 导出日期范围内有有效上传的会话及完整关联数据 |
+
+日期参数必填、格式 `yyyy-MM-dd`、按 `Asia/Shanghai` 计算，包含起止当天。缺参、格式错误或开始晚于结束返回 **400**。没有匹配会话时仍返回 **200** 和有效 ZIP，业务数据数组为空。
+
+```bash
+curl --fail -o coworkdata-all.zip 'http://localhost:8080/api/db/export-all'
+curl --fail -o coworkdata-range.zip 'http://localhost:8080/api/db/export-by-upload-date?startDate=2026-10-19&endDate=2026-10-20'
+# 首页“2026年10月19日之前（历史数据）”实际请求；需先完成历史回填
+curl --fail -o coworkdata-legacy.zip 'http://localhost:8080/api/db/export-by-upload-date?startDate=2026-10-18&endDate=2026-10-18'
+```
+
+全量包含 `sessions`、`tasks`、`events`、`session_sse_events`、`snapshots`、`memory_events`、`memory_subscriptions`、`agent_templates`、`user_profile`、`cowork`、`cowork_permission`。日期导出不含 `agent_templates`，共享用户与 cowork 信息仅保留选中会话引用的数据。
+
+ZIP 包含按表命名的 JSON 数组、`manifest.json` 和 `export-summary.json`。汇总表与历史基线表不是业务导出表；全量下载也不是包含全部数据库对象的物理备份。
+
+日期筛选只用来选择会话，不按各事件创建时间裁剪，不提供历史时点还原。日期导出使用只读一致性快照；全量导出当前不使用跨表统一快照。
+
+服务分批查询并直写 HTTP，不在服务器预生成 ZIP。日期接口设置 `Cache-Control: no-store`、`X-Accel-Buffering: no`；代理和客户端仍需匹配超时。响应开始后失败可能留下不完整 ZIP，即使已收到 200 也需检查解压结果。
+
+前端入口为 `src/main/resources/static/index.html`。详细口径、迁移与故障排查见[上传日期导出](UPLOAD_DATE_EXPORT.md)。
 
 ---
 
@@ -536,7 +588,7 @@ DELETE /api/sessions/{id}
 ### 9.4 按用户列表 + 活动时间
 
 ```text
-GET /api/sessions?userId=zhangsan
+GET /api/sessions?userId=w30040833
 GET /api/events/last-activity-times
 → 用 last_activity 覆盖展示时间，避免 updated_at 被 recovery 污染
 ```
@@ -680,4 +732,4 @@ GET /api/events/last-activity-times
 4. **全量回放**：使用 `GET /api/sessions/{id}/events`。
 5. **软删**：`DELETE /api/sessions/{id}` 写 `delete_at`，不物理删关联数据。
 6. **鉴权**：当前 `/api/**` 为 `permitAll`，生产请加鉴权。
-7. **数据库**：见 `application.yml`；表结构见 `schema.sql`。
+7. **数据库**：openGauss 7.0.0-RC3；连接配置见 `application.yml`，表结构见 `schema.sql`，部署与验收见 [DEPLOYMENT.md](DEPLOYMENT.md)。
